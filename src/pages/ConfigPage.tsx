@@ -164,7 +164,6 @@ export default function ConfigPage() {
     }
   };
 
-  const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
 
   const handleDeleteUser = async (authUserId: string, nome: string) => {
     if (!confirm(`Tem certeza que deseja excluir o usuário "${nome}"? Esta ação não pode ser desfeita.`)) return;
