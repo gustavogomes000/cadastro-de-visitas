@@ -35,7 +35,8 @@ export default function EditarPessoa() {
   const [zonaEleitoral, setZonaEleitoral] = useState("");
   const [secaoEleitoral, setSecaoEleitoral] = useState("");
   const [municipio, setMunicipio] = useState("");
-  const [uf, setUf] = useState("");
+  const [uf, setUf] = useState("GO");
+  const [colegioEleitoral, setColegioEleitoral] = useState("");
   const [situacaoTitulo, setSituacaoTitulo] = useState("");
   const [observacoesGerais, setObservacoesGerais] = useState("");
 
