@@ -36,12 +36,21 @@ Deno.serve(async (req) => {
 
     const encoded = encodeURIComponent(`%${termo}%`);
 
-    // All indicators come from hierarquia_usuarios table
-    // suplentes have tipo='suplente', liderancas have tipo='lideranca' or 'coordenador'
-    const hierResp = await fetch(
-      `${EXTERNAL_URL}/rest/v1/hierarquia_usuarios?select=id,nome,tipo&tipo=in.(lideranca,suplente,coordenador)&nome=ilike.${encoded}&limit=30`,
-      { headers: restHeaders }
-    );
+    // Debug: try simple query first
+    const testUrl = `${EXTERNAL_URL}/rest/v1/hierarquia_usuarios?select=id,nome,tipo&nome=ilike.${encoded}&limit=10`;
+    const hierResp = await fetch(testUrl, { headers: restHeaders });
+    const hierText = await hierResp.text();
+
+    // Parse
+    let hierData: any[] = [];
+    try { hierData = JSON.parse(hierText); } catch {}
+
+    if (!Array.isArray(hierData)) {
+      return new Response(
+        JSON.stringify({ suplentes: [], liderancas: [], debug_url: testUrl, debug_status: hierResp.status, debug_body: hierText.substring(0, 500) }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     const hierData = hierResp.ok ? await hierResp.json() : [];
 
