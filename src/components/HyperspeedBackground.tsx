@@ -68,6 +68,7 @@ export function HyperspeedBackground() {
         ctx.stroke();
       }
 
+      // Road effect
       ctx.globalAlpha = 0.08;
       ctx.strokeStyle = "#ec4899";
       ctx.lineWidth = 2;
@@ -82,6 +83,7 @@ export function HyperspeedBackground() {
 
       ctx.globalAlpha = 1;
 
+      // Vignette
       const grad = ctx.createRadialGradient(cx, h / 2, h * 0.2, cx, h / 2, h * 0.9);
       grad.addColorStop(0, "transparent");
       grad.addColorStop(1, "rgba(7, 5, 16, 0.5)");
@@ -91,6 +93,7 @@ export function HyperspeedBackground() {
       animId = requestAnimationFrame(draw);
     };
 
+    // Clear initial
     ctx.fillStyle = "#070510";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     draw();
