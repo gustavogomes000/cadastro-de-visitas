@@ -32,6 +32,7 @@ interface DadosPessoa {
   titulo_eleitor: string;
   zona_eleitoral: string;
   secao_eleitoral: string;
+  colegio_eleitoral: string;
   municipio: string;
   uf: string;
   situacao_titulo: string;
