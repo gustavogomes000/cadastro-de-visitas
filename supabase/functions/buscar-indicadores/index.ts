@@ -1,3 +1,5 @@
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -14,56 +16,56 @@ Deno.serve(async (req) => {
 
     if (!EXTERNAL_URL || !EXTERNAL_KEY) {
       return new Response(
-        JSON.stringify({ error: "Secrets EXTERNAL_SUPABASE_URL ou EXTERNAL_SUPABASE_SERVICE_KEY não configurados" }),
+        JSON.stringify({ error: "Secrets não configurados" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     const body = await req.json();
-    const termo = body.termo || body.busca || "";
+    const termo = (body.termo || body.busca || "").trim();
 
-    if (!termo || termo.trim().length < 2) {
+    if (!termo || termo.length < 2) {
       return new Response(
         JSON.stringify({ suplentes: [], liderancas: [] }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Proxy para a Edge Function do banco externo
-    const response = await fetch(`${EXTERNAL_URL}/functions/v1/buscar-indicadores`, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${EXTERNAL_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ busca: termo.trim() }),
-    });
+    const supabase = createClient(EXTERNAL_URL, EXTERNAL_KEY);
 
-    const data = await response.json();
+    // Query suplentes (has nome column directly)
+    const supPromise = supabase
+      .from("suplentes")
+      .select("id, nome")
+      .ilike("nome", `%${termo}%`)
+      .limit(15);
 
-    // Normalizar resposta: a função externa pode retornar { resultados: [...] } ou { suplentes, liderancas }
-    let suplentes: any[] = [];
-    let liderancas: any[] = [];
+    // Query hierarquia_usuarios (has nome column directly)
+    const hierPromise = supabase
+      .from("hierarquia_usuarios")
+      .select("id, nome, tipo")
+      .eq("ativo", true)
+      .in("tipo", ["lideranca", "suplente", "coordenador"])
+      .ilike("nome", `%${termo}%`)
+      .limit(15);
 
-    if (data.resultados && Array.isArray(data.resultados)) {
-      // Formato com lista unificada com campo "tipo"
-      for (const item of data.resultados) {
-        if (item.tipo === "suplente") {
-          suplentes.push(item);
-        } else if (item.tipo === "lideranca") {
-          liderancas.push(item);
-        }
-      }
-    } else {
-      suplentes = data.suplentes || [];
-      liderancas = data.liderancas || [];
-    }
+    const [supResult, hierResult] = await Promise.all([supPromise, hierPromise]);
+
+    const suplentes = (supResult.data || []).map((s: any) => ({ id: s.id, nome: s.nome }));
+    
+    // From hierarquia, separate liderancas (exclude suplente type to avoid duplicates)
+    const liderancas = (hierResult.data || [])
+      .filter((h: any) => h.tipo === "lideranca" || h.tipo === "coordenador")
+      .map((h: any) => ({ id: h.id, nome: h.nome }));
+
+    console.log(`Busca "${termo}": ${suplentes.length} suplentes, ${liderancas.length} liderancas`);
 
     return new Response(
       JSON.stringify({ suplentes, liderancas }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
+    console.error("Erro buscar-indicadores:", error);
     return new Response(
       JSON.stringify({ error: error.message }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
