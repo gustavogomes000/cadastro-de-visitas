@@ -44,6 +44,8 @@ interface DadosVisita {
   assunto: string;
   descricao_assunto: string;
   quem_indicou: string;
+  indicador_tipo: "suplente" | "lideranca" | null;
+  indicador_id: string | null;
   origem_visita: string;
   status: string;
   responsavel_tratativa: string;
