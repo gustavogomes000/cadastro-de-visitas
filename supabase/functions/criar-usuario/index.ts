@@ -1,4 +1,4 @@
-// v5 - criar, atualizar, deletar usuario - email_exists recovery
+// v6 - criar, atualizar, deletar usuario - email_exists recovery
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
