@@ -56,6 +56,29 @@ export default function Login() {
   const [remember, setRemember] = useState(() => !!localStorage.getItem("saved_user"));
 
 
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    if (!username.trim()) {
+      setError("Digite o nome de usuário");
+      return;
+    }
+    setLoading(true);
+    const { error } = await signIn(username.trim(), password);
+    if (error) {
+      setError(error);
+    } else {
+      if (remember) {
+        localStorage.setItem("saved_user", username.trim());
+        localStorage.setItem("saved_pass", password);
+      } else {
+        localStorage.removeItem("saved_user");
+        localStorage.removeItem("saved_pass");
+      }
+    }
+    setLoading(false);
+  };
+
   const preset = useMemo(() => hyperspeedPreset, []);
 
   return (
