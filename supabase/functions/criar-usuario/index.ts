@@ -1,4 +1,4 @@
-// v2 - Cadastro de Visitas — criar, atualizar senha, deletar usuário
+// v3 - Cadastro de Visitas — criar, atualizar senha, deletar usuário, email_exists fix
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
