@@ -626,7 +626,7 @@ export default function NovaVisita() {
                   <InputField label="Município" value={pessoa.municipio} onChange={(v) => setPessoa({ ...pessoa, municipio: v })} placeholder="Cidade" />
                   <SelectField label="UF" value={pessoa.uf} onChange={(v) => setPessoa({ ...pessoa, uf: v })} options={UF_OPTIONS} />
                 </div>
-                <SelectField label="Situação do título" value={pessoa.situacao_titulo} onChange={(v) => setPessoa({ ...pessoa, situacao_titulo: v })} options={["Regular", "Cancelado", "Suspenso", "Não possui"]} />
+                
               </div>
             </div>
           )}
