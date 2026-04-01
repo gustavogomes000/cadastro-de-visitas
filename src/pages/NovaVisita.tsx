@@ -69,7 +69,32 @@ interface IndicadorResultados {
 
 const createEmptyIndicadorResultados = (): IndicadorResultados => ({ suplentes: [], liderancas: [] });
 
-const INDICADOR_DEBOUNCE_MS = 180;
+// Cache global para evitar re-fetch entre renders
+let indicadorCacheGlobal: IndicadorResultados | null = null;
+let indicadorCachePromise: Promise<IndicadorResultados> | null = null;
+
+async function fetchAllIndicadores(): Promise<IndicadorResultados> {
+  if (indicadorCacheGlobal) return indicadorCacheGlobal;
+  if (indicadorCachePromise) return indicadorCachePromise;
+
+  indicadorCachePromise = Promise.all([
+    fetch(`${EXTERNAL_FUNCTIONS_URL}/buscar-suplentes`, { method: "GET", headers: EXTERNAL_FUNCTIONS_HEADERS }).then(r => r.ok ? r.json() : []),
+    fetch(`${EXTERNAL_FUNCTIONS_URL}/buscar-liderancas-externo`, { method: "GET", headers: EXTERNAL_FUNCTIONS_HEADERS }).then(r => r.ok ? r.json() : []),
+  ]).then(([suplData, lidData]) => {
+    const result: IndicadorResultados = {
+      suplentes: (Array.isArray(suplData) ? suplData : []).map((s: any) => ({ id: s.id, nome: s.nome, numero_urna: s.numero_urna, partido: s.partido, regiao: s.regiao_atuacao })),
+      liderancas: (Array.isArray(lidData) ? lidData : []).map((l: any) => ({ id: l.id, nome: l.nome, regiao: l.regiao_atuacao })),
+    };
+    indicadorCacheGlobal = result;
+    indicadorCachePromise = null;
+    return result;
+  }).catch(() => {
+    indicadorCachePromise = null;
+    return createEmptyIndicadorResultados();
+  });
+
+  return indicadorCachePromise;
+}
 const SUPABASE_PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID || "hzhxrkurljrogxtzxmmb";
 const OWN_FUNCTIONS_URL = `https://${SUPABASE_PROJECT_ID}.supabase.co/functions/v1`;
 const EXTERNAL_FUNCTIONS_URL = "https://yvdfdmyusdhgtzfguxbj.supabase.co/functions/v1";
