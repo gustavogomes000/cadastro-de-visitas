@@ -14,50 +14,67 @@ Deno.serve(async (req) => {
 
     if (!EXTERNAL_URL || !EXTERNAL_KEY) {
       return new Response(
-        JSON.stringify({ error: "Secrets EXTERNAL_SUPABASE_URL ou EXTERNAL_SUPABASE_SERVICE_KEY não configurados" }),
+        JSON.stringify({ error: "Secrets não configurados" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const body = await req.json();
-    const termo = body.termo || body.busca || "";
+    const body = await req.json().catch(() => ({}));
+    const termo = (body.termo || body.busca || "").trim();
+    const debug = body.debug === true;
 
-    if (!termo || termo.trim().length < 2) {
+    // Debug mode: return raw table contents
+    if (debug) {
+      const restHeaders = {
+        apikey: EXTERNAL_KEY,
+        Authorization: `Bearer ${EXTERNAL_KEY}`,
+      };
+      const supResp = await fetch(`${EXTERNAL_URL}/rest/v1/suplentes?select=id,nome&limit=5`, { headers: restHeaders });
+      const supData = await supResp.json();
+      
+      // Also try hierarquia_usuarios
+      const hierResp = await fetch(`${EXTERNAL_URL}/rest/v1/hierarquia_usuarios?select=id,nome,tipo&limit=5`, { headers: restHeaders });
+      const hierText = await hierResp.text();
+      
+      return new Response(
+        JSON.stringify({ 
+          external_url: EXTERNAL_URL,
+          key_prefix: EXTERNAL_KEY.substring(0, 50) + "...",
+          suplentes_status: supResp.status,
+          suplentes_data: supData,
+          hierarquia_status: hierResp.status,
+          hierarquia_raw: hierText.substring(0, 500),
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (!termo || termo.length < 2) {
       return new Response(
         JSON.stringify({ suplentes: [], liderancas: [] }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Proxy para a Edge Function do banco externo
-    const response = await fetch(`${EXTERNAL_URL}/functions/v1/buscar-indicadores`, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${EXTERNAL_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ busca: termo.trim() }),
-    });
+    const restHeaders = {
+      apikey: EXTERNAL_KEY,
+      Authorization: `Bearer ${EXTERNAL_KEY}`,
+    };
 
-    const data = await response.json();
+    const encoded = encodeURIComponent(`%${termo}%`);
 
-    // Normalizar resposta: a função externa pode retornar { resultados: [...] } ou { suplentes, liderancas }
-    let suplentes: any[] = [];
-    let liderancas: any[] = [];
+    const [supResp, hierResp] = await Promise.all([
+      fetch(`${EXTERNAL_URL}/rest/v1/suplentes?select=id,nome&nome=ilike.${encoded}&limit=15`, { headers: restHeaders }),
+      fetch(`${EXTERNAL_URL}/rest/v1/hierarquia_usuarios?select=id,nome,tipo&ativo=eq.true&tipo=in.(lideranca,suplente,coordenador)&nome=ilike.${encoded}&limit=15`, { headers: restHeaders }),
+    ]);
 
-    if (data.resultados && Array.isArray(data.resultados)) {
-      // Formato com lista unificada com campo "tipo"
-      for (const item of data.resultados) {
-        if (item.tipo === "suplente") {
-          suplentes.push(item);
-        } else if (item.tipo === "lideranca") {
-          liderancas.push(item);
-        }
-      }
-    } else {
-      suplentes = data.suplentes || [];
-      liderancas = data.liderancas || [];
-    }
+    const supData = supResp.ok ? await supResp.json() : [];
+    const hierData = hierResp.ok ? await hierResp.json() : [];
+
+    const suplentes = Array.isArray(supData) ? supData.map((s: any) => ({ id: s.id, nome: s.nome })) : [];
+    const liderancas = Array.isArray(hierData)
+      ? hierData.filter((h: any) => h.tipo === "lideranca" || h.tipo === "coordenador").map((h: any) => ({ id: h.id, nome: h.nome }))
+      : [];
 
     return new Response(
       JSON.stringify({ suplentes, liderancas }),

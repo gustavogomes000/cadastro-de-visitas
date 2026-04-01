@@ -70,46 +70,21 @@ interface IndicadorResultados {
 const createEmptyIndicadorResultados = (): IndicadorResultados => ({ suplentes: [], liderancas: [] });
 
 const INDICADOR_DEBOUNCE_MS = 180;
-const EXTERNAL_SUPABASE_URL = "https://yvdfdmyusdhgtzfguxbj.supabase.co";
-const EXTERNAL_FUNCTIONS_URL = `${EXTERNAL_SUPABASE_URL}/functions/v1`;
+const SUPABASE_PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID || "hzhxrkurljrogxtzxmmb";
+const OWN_FUNCTIONS_URL = `https://${SUPABASE_PROJECT_ID}.supabase.co/functions/v1`;
+const EXTERNAL_FUNCTIONS_URL = "https://yvdfdmyusdhgtzfguxbj.supabase.co/functions/v1";
 const EXTERNAL_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl2ZGZkbXl1c2RoZ3R6Zmd1eGJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0OTg4MzksImV4cCI6MjA4OTA3NDgzOX0.-xSNbj5kLibkhJoXmOXjfmYPKBB-gqasQgy322Kk-n4";
 const EXTERNAL_FUNCTIONS_HEADERS = {
   "Content-Type": "application/json",
   apikey: EXTERNAL_SUPABASE_ANON_KEY,
   Authorization: `Bearer ${EXTERNAL_SUPABASE_ANON_KEY}`,
 };
-const EXTERNAL_REST_HEADERS = {
-  apikey: EXTERNAL_SUPABASE_ANON_KEY,
-  Authorization: `Bearer ${EXTERNAL_SUPABASE_ANON_KEY}`,
+const OWN_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+const OWN_FUNCTIONS_HEADERS = {
   "Content-Type": "application/json",
-  Prefer: "return=representation",
+  apikey: OWN_ANON_KEY,
+  Authorization: `Bearer ${OWN_ANON_KEY}`,
 };
-
-async function buscarIndicadoresDirecto(termo: string): Promise<IndicadorResultados> {
-  const encoded = encodeURIComponent(`%${termo}%`);
-  
-  // Query suplentes directly (has nome column)
-  const supPromise = fetch(
-    `${EXTERNAL_SUPABASE_URL}/rest/v1/suplentes?select=id,nome&nome=ilike.${encoded}&limit=15`,
-    { headers: EXTERNAL_REST_HEADERS }
-  ).then(r => r.ok ? r.json() : []).catch(() => []);
-
-  // Query hierarquia_usuarios for liderancas (has nome column directly)
-  const lidPromise = fetch(
-    `${EXTERNAL_SUPABASE_URL}/rest/v1/hierarquia_usuarios?select=id,nome,tipo&ativo=eq.true&tipo=in.("lideranca","suplente","coordenador")&nome=ilike.${encoded}&limit=15`,
-    { headers: EXTERNAL_REST_HEADERS }
-  ).then(r => r.ok ? r.json() : []).catch(() => []);
-
-  const [supData, lidData] = await Promise.all([supPromise, lidPromise]);
-
-  const suplentes = Array.isArray(supData) ? supData.map((s: any) => ({ id: s.id, nome: s.nome })) : [];
-  // Filter hierarquia results into liderancas (exclude suplentes to avoid duplicates)
-  const liderancas = Array.isArray(lidData) 
-    ? lidData.filter((l: any) => l.tipo === "lideranca" || l.tipo === "coordenador").map((l: any) => ({ id: l.id, nome: l.nome }))
-    : [];
-
-  return { suplentes, liderancas };
-}
 
 function normalizeIndicadorResultados(data: unknown): IndicadorResultados {
   const payload = data as Partial<IndicadorResultados> | null;
@@ -420,7 +395,18 @@ export default function NovaVisita() {
       indicadorAbortRef.current = controller;
 
       try {
-        const data = await buscarIndicadoresDirecto(termo);
+        const resp = await fetch(`${OWN_FUNCTIONS_URL}/buscar-indicadores`, {
+          method: "POST",
+          headers: OWN_FUNCTIONS_HEADERS,
+          body: JSON.stringify({ termo }),
+          signal: controller.signal,
+        });
+
+        if (!resp.ok) {
+          throw new Error(`Falha ao buscar indicadores (${resp.status})`);
+        }
+
+        const data = normalizeIndicadorResultados(await resp.json());
         indicadorCacheRef.current.set(termoNormalizado, data);
 
         if (indicadorUltimoTermoRef.current !== termoNormalizado) return;
