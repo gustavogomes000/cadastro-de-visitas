@@ -1,4 +1,4 @@
-// v9 - criar, atualizar, deletar usuario
+// v10 - criar, atualizar, deletar usuario - generateLink workaround
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -63,35 +63,6 @@ Deno.serve(async (req) => {
       return json({ success: true, message: 'Senha e perfil atualizados' });
     }
 
-    // Try to find existing auth user by email using GoTrue admin REST API
-    async function findAuthUserByEmail(targetEmail: string): Promise<string | null> {
-      // Paginate through all users to find the one with matching email
-      let page = 1;
-      const perPage = 100;
-      while (true) {
-        const res = await fetch(
-          `${supabaseUrl}/auth/v1/admin/users?page=${page}&per_page=${perPage}`,
-          {
-            headers: {
-              'Authorization': `Bearer ${serviceRoleKey}`,
-              'apikey': serviceRoleKey,
-            },
-          }
-        );
-        if (!res.ok) {
-          console.error('Admin users API error:', res.status, await res.text());
-          return null;
-        }
-        const data = await res.json();
-        const users = data.users || [];
-        const found = users.find((u: any) => u.email === targetEmail);
-        if (found) return found.id;
-        if (users.length < perPage) break;
-        page++;
-      }
-      return null;
-    }
-
     // Try to create new auth user
     const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email,
@@ -104,15 +75,22 @@ Deno.serve(async (req) => {
     if (authError) {
       console.error('Auth create failed:', authError.message);
 
-      // Try to find and reuse existing auth user
-      const existingId = await findAuthUserByEmail(email);
-      if (!existingId) {
-        return json({ error: 'Erro ao criar usuário. Email conflitante: ' + email }, 500);
+      // Use generateLink to discover existing user's ID
+      const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+        type: 'magiclink',
+        email,
+      });
+
+      if (linkError || !linkData?.user?.id) {
+        console.error('generateLink failed:', linkError?.message);
+        return json({ error: 'Erro ao criar usuário. Tente outro nome.' }, 500);
       }
 
-      // Update the existing auth user's password
-      await supabaseAdmin.auth.admin.updateUserById(existingId, { password: senha });
-      authUserId = existingId;
+      authUserId = linkData.user.id;
+      console.log('Found existing auth user via generateLink:', authUserId);
+
+      // Update password
+      await supabaseAdmin.auth.admin.updateUserById(authUserId, { password: senha });
     } else {
       authUserId = authUser.user.id;
     }
@@ -126,14 +104,13 @@ Deno.serve(async (req) => {
 
     if (userError) {
       console.error('Usuarios insert error:', userError);
-      // If we created a new user but insert failed, clean up
       if (!authError) {
         await supabaseAdmin.auth.admin.deleteUser(authUserId);
       }
       return json({ error: 'Erro ao criar registro: ' + userError.message }, 500);
     }
 
-    // Insert role
+    // Set role
     await supabaseAdmin.from('user_roles').delete().eq('user_id', authUserId);
     await supabaseAdmin.from('user_roles').insert({ user_id: authUserId, role });
 
