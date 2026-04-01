@@ -102,6 +102,26 @@ Deno.serve(async (req) => {
     });
 
     if (authError) {
+      // If email already exists in auth, try to find and link the existing auth user
+      if (authError.message?.includes('already been registered')) {
+        // List users to find by email
+        const { data: listData } = await supabaseAdmin.auth.admin.listUsers();
+        const existingAuthUser = listData?.users?.find(u => u.email === email);
+        if (existingAuthUser) {
+          // Update password
+          await supabaseAdmin.auth.admin.updateUserById(existingAuthUser.id, { password: senha });
+          // Insert into usuarios
+          await supabaseAdmin.from('usuarios').upsert({
+            user_id: existingAuthUser.id,
+            nome_usuario: nome,
+            email,
+          }, { onConflict: 'user_id' });
+          // Insert role
+          await supabaseAdmin.from('user_roles').delete().eq('user_id', existingAuthUser.id);
+          await supabaseAdmin.from('user_roles').insert({ user_id: existingAuthUser.id, role });
+          return json({ success: true, message: `Usuário "${nome}" vinculado e atualizado com sucesso` });
+        }
+      }
       console.error('Auth create error:', authError);
       return json({ error: 'Erro ao criar usuário: ' + authError.message }, 500);
     }
