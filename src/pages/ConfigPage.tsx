@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import {
   LogOut, Moon, Sun, UserPlus, Loader2, Shield, Headset,
-  Pencil, X, Check, Key, ChevronDown, ChevronUp
+  Pencil, X, Check, Key, ChevronDown, ChevronUp, Trash2
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
