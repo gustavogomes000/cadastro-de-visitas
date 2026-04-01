@@ -34,14 +34,16 @@ Deno.serve(async (req) => {
     const supabase = createClient(EXTERNAL_URL, EXTERNAL_KEY);
 
     // Query suplentes (has nome column directly)
-    const supPromise = supabase
+    const supResult = await supabase
       .from("suplentes")
       .select("id, nome")
       .ilike("nome", `%${termo}%`)
       .limit(15);
 
+    console.log("Suplentes result:", JSON.stringify(supResult));
+
     // Query hierarquia_usuarios (has nome column directly)
-    const hierPromise = supabase
+    const hierResult = await supabase
       .from("hierarquia_usuarios")
       .select("id, nome, tipo")
       .eq("ativo", true)
@@ -49,7 +51,7 @@ Deno.serve(async (req) => {
       .ilike("nome", `%${termo}%`)
       .limit(15);
 
-    const [supResult, hierResult] = await Promise.all([supPromise, hierPromise]);
+    console.log("Hierarquia result:", JSON.stringify(hierResult));
 
     const suplentes = (supResult.data || []).map((s: any) => ({ id: s.id, nome: s.nome }));
     
