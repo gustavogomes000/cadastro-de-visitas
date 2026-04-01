@@ -621,6 +621,7 @@ export default function NovaVisita() {
                   <InputField label="Zona eleitoral" value={pessoa.zona_eleitoral} onChange={(v) => setPessoa({ ...pessoa, zona_eleitoral: v.replace(/\D/g, "") })} placeholder="Ex: 42" />
                   <InputField label="Seção" value={pessoa.secao_eleitoral} onChange={(v) => setPessoa({ ...pessoa, secao_eleitoral: v.replace(/\D/g, "") })} placeholder="Ex: 123" />
                 </div>
+                <InputField label="Colégio eleitoral" value={pessoa.colegio_eleitoral} onChange={(v) => setPessoa({ ...pessoa, colegio_eleitoral: v })} placeholder="Nome do colégio eleitoral" />
                 <div className="grid grid-cols-2 gap-3">
                   <InputField label="Município" value={pessoa.municipio} onChange={(v) => setPessoa({ ...pessoa, municipio: v })} placeholder="Cidade" />
                   <SelectField label="UF" value={pessoa.uf} onChange={(v) => setPessoa({ ...pessoa, uf: v })} options={UF_OPTIONS} />
