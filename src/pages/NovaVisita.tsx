@@ -289,11 +289,21 @@ export default function NovaVisita() {
     debounceRef.current = setTimeout(async () => {
       setIndicadorBuscando(true);
       try {
-        const { data } = await supabase.functions.invoke("buscar-indicadores", {
-          body: { termo: valor.trim() },
+        const resp = await fetch("https://yvdfdmyusdhgtzfguxbj.supabase.co/functions/v1/buscar-indicadores", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "apikey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl2ZGZkbXl1c2RoZ3R6Zmd1eGJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0OTg4MzksImV4cCI6MjA4OTA3NDgzOX0.-xSNbj5kLibkhJoXmOXjfmYPKBB-gqasQgy322Kk-n4",
+            "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl2ZGZkbXl1c2RoZ3R6Zmd1eGJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0OTg4MzksImV4cCI6MjA4OTA3NDgzOX0.-xSNbj5kLibkhJoXmOXjfmYPKBB-gqasQgy322Kk-n4",
+          },
+          body: JSON.stringify({ termo: valor.trim() }),
         });
+        const data = await resp.json();
         if (data) {
-          setIndicadorResultados(data);
+          setIndicadorResultados({
+            suplentes: data.suplentes || [],
+            liderancas: data.liderancas || [],
+          });
           setIndicadorDropdownAberto(true);
         }
       } catch (e) {
@@ -301,7 +311,7 @@ export default function NovaVisita() {
       } finally {
         setIndicadorBuscando(false);
       }
-    }, 400);
+    }, 300);
   };
 
   const selecionarIndicador = (item: any, tipo: "suplente" | "lideranca") => {
