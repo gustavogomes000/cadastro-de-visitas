@@ -258,8 +258,8 @@ export default function NovaVisita() {
       telefone: data.telefone || "", email: data.email || "", whatsapp: data.whatsapp || "",
       instagram: data.instagram || "", outras_redes: data.outras_redes || "",
       titulo_eleitor: data.titulo_eleitor || "", zona_eleitoral: data.zona_eleitoral || "",
-      secao_eleitoral: data.secao_eleitoral || "", municipio: data.municipio || "",
-      uf: data.uf || "", situacao_titulo: data.situacao_titulo || "",
+      secao_eleitoral: data.secao_eleitoral || "", colegio_eleitoral: data.colegio_eleitoral || "",
+      municipio: data.municipio || "", uf: data.uf || "GO", situacao_titulo: data.situacao_titulo || "",
       observacoes_gerais: data.observacoes_gerais || "",
     });
   }
