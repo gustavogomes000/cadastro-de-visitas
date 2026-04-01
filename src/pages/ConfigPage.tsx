@@ -47,22 +47,31 @@ export default function ConfigPage() {
   }, [isAdmin]);
 
   async function loadUsuarios() {
-    // Schema real: usuarios(user_id, nome_usuario) + user_roles(user_id, role)
-    const { data } = await supabase
+    // Fetch usuarios and roles separately (no FK between them)
+    const { data: usuariosData } = await supabase
       .from("usuarios")
-      .select("id, user_id, nome_usuario, criado_em, user_roles(role)")
+      .select("id, user_id, nome_usuario, criado_em")
       .order("criado_em", { ascending: false });
 
-    if (data) {
-      // Mapeia para a interface esperada pelo restante do componente
-      const mapped: UsuarioComRole[] = (data as any[]).map((u) => ({
-        id: u.id,
-        auth_user_id: u.user_id,
-        nome: u.nome_usuario,
-        tipo: u.user_roles?.[0]?.role ?? "recepcao",
-      }));
-      setUsuarios(mapped);
-    }
+    if (!usuariosData) return;
+
+    // Fetch all roles
+    const userIds = usuariosData.map(u => u.user_id);
+    const { data: rolesData } = await supabase
+      .from("user_roles")
+      .select("user_id, role")
+      .in("user_id", userIds);
+
+    const roleMap = new Map<string, string>();
+    rolesData?.forEach(r => roleMap.set(r.user_id, r.role));
+
+    const mapped: UsuarioComRole[] = usuariosData.map((u) => ({
+      id: u.id,
+      auth_user_id: u.user_id,
+      nome: u.nome_usuario,
+      tipo: roleMap.get(u.user_id) ?? "recepcao",
+    }));
+    setUsuarios(mapped);
   }
 
   const toggleDark = () => {
