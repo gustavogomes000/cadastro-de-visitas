@@ -1,5 +1,4 @@
-// v1 - Cadastro de Visitas
-// Schema: usuarios(id, user_id, nome_usuario, email) + user_roles(user_id, role)
+// v2 - Cadastro de Visitas — criar, atualizar senha, deletar usuário
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -19,7 +18,34 @@ Deno.serve(async (req) => {
     });
 
   try {
-    const { nome, senha, tipo } = await req.json();
+    const body = await req.json();
+    const { action } = body;
+
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+
+    // ===== DELETE USER =====
+    if (action === 'delete') {
+      const { user_id } = body;
+      if (!user_id) return json({ error: 'user_id é obrigatório' }, 400);
+
+      // Delete from user_roles
+      await supabaseAdmin.from('user_roles').delete().eq('user_id', user_id);
+      // Delete from usuarios
+      await supabaseAdmin.from('usuarios').delete().eq('user_id', user_id);
+      // Delete auth user
+      const { error } = await supabaseAdmin.auth.admin.deleteUser(user_id);
+      if (error) {
+        console.error('Delete user error:', error);
+        return json({ error: 'Erro ao deletar usuário: ' + error.message }, 500);
+      }
+
+      return json({ success: true, message: 'Usuário deletado com sucesso' });
+    }
+
+    // ===== CREATE / UPDATE USER =====
+    const { nome, senha, tipo } = body;
 
     if (!nome || !senha) {
       return json({ error: 'Nome e senha são obrigatórios' }, 400);
@@ -28,10 +54,6 @@ Deno.serve(async (req) => {
     if (senha.length < 6) {
       return json({ error: 'Senha deve ter pelo menos 6 caracteres' }, 400);
     }
-
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
 
     // Normalize: remove special chars, spaces → dots
     const nomeNorm = nome
@@ -72,11 +94,11 @@ Deno.serve(async (req) => {
       return json({ success: true, message: 'Senha e perfil atualizados' });
     }
 
-    // Create new auth user (no email confirmation)
+    // Create new auth user (email auto-confirmed so they can log in)
     const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password: senha,
-      email_confirm: false,
+      email_confirm: true,
     });
 
     if (authError) {
@@ -106,7 +128,6 @@ Deno.serve(async (req) => {
 
     if (roleError) {
       console.error('Role insert error:', roleError);
-      // Non-fatal: user was created, just without explicit role
     }
 
     return json({ success: true, message: `Usuário "${nome}" criado com sucesso` });

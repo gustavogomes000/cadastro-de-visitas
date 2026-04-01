@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import {
   LogOut, Moon, Sun, UserPlus, Loader2, Shield, Headset,
-  Pencil, X, Check, Key, ChevronDown, ChevronUp
+  Pencil, X, Check, Key, ChevronDown, ChevronUp, Trash2
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -39,6 +39,7 @@ export default function ConfigPage() {
 
   // Expanded user
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
+  const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
 
   useEffect(() => {
     const isDark = document.documentElement.classList.contains("dark");
@@ -47,22 +48,31 @@ export default function ConfigPage() {
   }, [isAdmin]);
 
   async function loadUsuarios() {
-    // Schema real: usuarios(user_id, nome_usuario) + user_roles(user_id, role)
-    const { data } = await supabase
+    // Fetch usuarios and roles separately (no FK between them)
+    const { data: usuariosData } = await supabase
       .from("usuarios")
-      .select("id, user_id, nome_usuario, criado_em, user_roles(role)")
+      .select("id, user_id, nome_usuario, criado_em")
       .order("criado_em", { ascending: false });
 
-    if (data) {
-      // Mapeia para a interface esperada pelo restante do componente
-      const mapped: UsuarioComRole[] = (data as any[]).map((u) => ({
-        id: u.id,
-        auth_user_id: u.user_id,
-        nome: u.nome_usuario,
-        tipo: u.user_roles?.[0]?.role ?? "recepcao",
-      }));
-      setUsuarios(mapped);
-    }
+    if (!usuariosData) return;
+
+    // Fetch all roles
+    const userIds = usuariosData.map(u => u.user_id);
+    const { data: rolesData } = await supabase
+      .from("user_roles")
+      .select("user_id, role")
+      .in("user_id", userIds);
+
+    const roleMap = new Map<string, string>();
+    rolesData?.forEach(r => roleMap.set(r.user_id, r.role));
+
+    const mapped: UsuarioComRole[] = usuariosData.map((u) => ({
+      id: u.id,
+      auth_user_id: u.user_id,
+      nome: u.nome_usuario,
+      tipo: roleMap.get(u.user_id) ?? "recepcao",
+    }));
+    setUsuarios(mapped);
   }
 
   const toggleDark = () => {
@@ -154,6 +164,22 @@ export default function ConfigPage() {
     }
   };
 
+
+  const handleDeleteUser = async (authUserId: string, nome: string) => {
+    if (!confirm(`Tem certeza que deseja excluir o usuário "${nome}"? Esta ação não pode ser desfeita.`)) return;
+    setDeletingUserId(authUserId);
+    try {
+      const { data, error } = await supabase.functions.invoke("criar-usuario", {
+        body: { action: "delete", user_id: authUserId },
+      });
+      if (error || data?.error) throw new Error(data?.error || error?.message);
+      toast({ title: "Sucesso!", description: `Usuário "${nome}" deletado.` });
+      loadUsuarios();
+    } catch (err: any) {
+      toast({ title: "Erro ao deletar", description: err.message, variant: "destructive" });
+    }
+    setDeletingUserId(null);
+  };
   const RoleIcon = ({ r }: { r: string }) => {
     if (r === "admin") return <Shield size={14} className="text-primary" />;
     return <Headset size={14} className="text-muted-foreground" />;
@@ -383,6 +409,20 @@ export default function ConfigPage() {
                               </button>
                             </div>
                           </div>
+                        )}
+
+                        {/* Delete user */}
+                        {!isSelf && (
+                          <button
+                            onClick={() => handleDeleteUser(u.auth_user_id, u.nome)}
+                            disabled={deletingUserId === u.auth_user_id}
+                            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-destructive/10 hover:bg-destructive/20 text-destructive text-sm transition-colors disabled:opacity-50"
+                          >
+                            {deletingUserId === u.auth_user_id
+                              ? <Loader2 size={13} className="animate-spin" />
+                              : <Trash2 size={13} />}
+                            <span>Excluir usuário</span>
+                          </button>
                         )}
                       </div>
                     )}
