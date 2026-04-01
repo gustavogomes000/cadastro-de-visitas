@@ -1,4 +1,4 @@
-// v6 - criar, atualizar, deletar usuario - email_exists recovery
+// v7 - criar, atualizar, deletar usuario
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -23,7 +23,9 @@ Deno.serve(async (req) => {
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
 
     // ===== DELETE USER =====
     if (action === 'delete') {
@@ -75,26 +77,6 @@ Deno.serve(async (req) => {
       return json({ success: true, message: 'Senha e perfil atualizados' });
     }
 
-    // Helper to link an existing auth user
-    async function linkExistingAuthUser(authUserId: string) {
-      await supabaseAdmin.auth.admin.updateUserById(authUserId, { password: senha });
-
-      // Try insert first, if conflict do update
-      const { error: insErr } = await supabaseAdmin.from('usuarios').insert({
-        user_id: authUserId,
-        nome_usuario: nome,
-        email,
-      });
-      if (insErr) {
-        // Maybe user_id already in usuarios with different name - update it
-        await supabaseAdmin.from('usuarios').update({ nome_usuario: nome, email }).eq('user_id', authUserId);
-      }
-
-      await supabaseAdmin.from('user_roles').delete().eq('user_id', authUserId);
-      await supabaseAdmin.from('user_roles').insert({ user_id: authUserId, role });
-      return json({ success: true, message: `Usuário "${nome}" criado com sucesso` });
-    }
-
     // Try to create new auth user
     const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email,
@@ -105,19 +87,48 @@ Deno.serve(async (req) => {
     if (authError) {
       console.error('Auth create failed:', authError.message);
 
-      // Try to find existing auth user with this email
-      const { data: listData, error: listErr } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
-      if (listErr) {
-        console.error('listUsers error:', listErr);
-        return json({ error: 'v6-listErr: ' + authError.message }, 500);
+      // If email exists in auth, find the user via REST API directly
+      const getUserByEmailUrl = `${supabaseUrl}/auth/v1/admin/users?page=1&per_page=50`;
+      const res = await fetch(getUserByEmailUrl, {
+        headers: {
+          'Authorization': `Bearer ${serviceRoleKey}`,
+          'apikey': serviceRoleKey,
+        },
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const users = data.users || data;
+        const found = Array.isArray(users)
+          ? users.find((u: any) => u.email === email)
+          : null;
+
+        if (found) {
+          // Update password
+          await supabaseAdmin.auth.admin.updateUserById(found.id, { password: senha });
+
+          // Insert into usuarios
+          const { error: insErr } = await supabaseAdmin.from('usuarios').insert({
+            user_id: found.id,
+            nome_usuario: nome,
+            email,
+          });
+          if (insErr) {
+            await supabaseAdmin.from('usuarios')
+              .update({ nome_usuario: nome, email })
+              .eq('user_id', found.id);
+          }
+
+          await supabaseAdmin.from('user_roles').delete().eq('user_id', found.id);
+          await supabaseAdmin.from('user_roles').insert({ user_id: found.id, role });
+
+          return json({ success: true, message: `Usuário "${nome}" criado com sucesso` });
+        }
+      } else {
+        console.error('REST list users failed:', res.status, await res.text());
       }
 
-      const found = listData?.users?.find((u: any) => u.email === email);
-      if (found) {
-        return await linkExistingAuthUser(found.id);
-      }
-
-      return json({ error: 'v6-notfound: ' + authError.message + ' email=' + email }, 500);
+      return json({ error: 'Erro ao criar usuário: ' + authError.message }, 500);
     }
 
     // New user created successfully
