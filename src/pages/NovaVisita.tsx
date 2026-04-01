@@ -225,10 +225,15 @@ export default function NovaVisita() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+  // Preload indicadores on mount
+  const allIndicadoresRef = useRef<IndicadorResultados>(createEmptyIndicadorResultados());
+  useEffect(() => {
+    fetchAllIndicadores().then(data => { allIndicadoresRef.current = data; });
+  }, []);
+
   useEffect(() => {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
-      indicadorAbortRef.current?.abort();
     };
   }, []);
 
