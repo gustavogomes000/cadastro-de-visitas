@@ -2,8 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { AppLayout } from "@/components/AppLayout";
-import QuemIndicouSelector from "@/components/QuemIndicouSelector";
-import { ArrowLeft, Loader2, Lock, CheckCircle2, AlertCircle, User, Search, ExternalLink } from "lucide-react";
+import { ArrowLeft, Loader2, Lock, CheckCircle2, User, Search, ExternalLink, X } from "lucide-react";
 import { maskCPF, unmaskCPF, maskPhone, maskTitulo, validateCPF } from "@/lib/masks";
 import { ASSUNTOS, ORIGENS_VISITA, STATUS_OPTIONS, UF_OPTIONS } from "@/lib/constants";
 import { useToast } from "@/hooks/use-toast";
@@ -50,6 +49,7 @@ interface DadosVisita {
   status: string;
   responsavel_tratativa: string;
   observacoes: string;
+  tipo_visitante: "" | "lideranca" | "fiscal" | "eleitor";
 }
 
 const InputField = ({ label, value, onChange, placeholder, type = "text", readonly = false }: {
@@ -107,6 +107,15 @@ export default function NovaVisita() {
   const [pessoaStatus, setPessoaStatus] = useState<"idle" | "found" | "new" | "api">("idle");
   const [visitHistory, setVisitHistory] = useState<any[]>([]);
 
+  // Indicador states
+  const [indicadorBusca, setIndicadorBusca] = useState("");
+  const [indicadorSelecionado, setIndicadorSelecionado] = useState<{ id: string; nome: string; tipo: "suplente" | "lideranca" } | null>(null);
+  const [indicadorResultados, setIndicadorResultados] = useState<{ suplentes: any[]; liderancas: any[] }>({ suplentes: [], liderancas: [] });
+  const [indicadorBuscando, setIndicadorBuscando] = useState(false);
+  const [indicadorDropdownAberto, setIndicadorDropdownAberto] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const indicadorContainerRef = useRef<HTMLDivElement>(null);
+
   const formMode = pessoaStatus === "found" ? "visit_only" : "full";
 
   const [pessoa, setPessoa] = useState<DadosPessoa>({ ...EMPTY_PESSOA });
@@ -116,7 +125,19 @@ export default function NovaVisita() {
     indicador_tipo: null, indicador_id: null,
     origem_visita: "", status: "Aguardando",
     responsavel_tratativa: "", observacoes: "",
+    tipo_visitante: "",
   });
+
+  // Close indicador dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (indicadorContainerRef.current && !indicadorContainerRef.current.contains(e.target as Node)) {
+        setIndicadorDropdownAberto(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
   useEffect(() => {
     if (pessoaId) loadExistingPessoa(pessoaId);
@@ -223,7 +244,6 @@ export default function NovaVisita() {
     if (/^\d+$/.test(raw) && raw.length <= 11) {
       const masked = maskCPF(value);
       setSearchInput(masked);
-      // Auto-search when 11 digits
       if (raw.length === 11) {
         setPessoa(prev => ({ ...prev, cpf: raw }));
         searchInputRef.current = masked;
@@ -242,13 +262,60 @@ export default function NovaVisita() {
     setExistingPessoaId(null);
     setPessoa({ ...EMPTY_PESSOA });
     setVisitHistory([]);
+    setIndicadorBusca("");
+    setIndicadorSelecionado(null);
+    setIndicadorResultados({ suplentes: [], liderancas: [] });
     setVisita({
       data_hora: getBrasiliaDateTime(),
       assunto: "", descricao_assunto: "", quem_indicou: "",
       indicador_tipo: null, indicador_id: null,
       origem_visita: "", status: "Aguardando",
       responsavel_tratativa: "", observacoes: "",
+      tipo_visitante: "",
     });
+  };
+
+  // ── Indicador search via Edge Function ──
+  const handleIndicadorInput = (valor: string) => {
+    setIndicadorBusca(valor);
+    setIndicadorSelecionado(null);
+    setVisita(prev => ({ ...prev, quem_indicou: valor, indicador_tipo: null, indicador_id: null }));
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (valor.trim().length < 2) {
+      setIndicadorResultados({ suplentes: [], liderancas: [] });
+      setIndicadorDropdownAberto(false);
+      return;
+    }
+    debounceRef.current = setTimeout(async () => {
+      setIndicadorBuscando(true);
+      try {
+        const { data } = await supabase.functions.invoke("buscar-indicadores", {
+          body: { termo: valor.trim() },
+        });
+        if (data) {
+          setIndicadorResultados(data);
+          setIndicadorDropdownAberto(true);
+        }
+      } catch (e) {
+        console.error("Erro ao buscar indicadores:", e);
+      } finally {
+        setIndicadorBuscando(false);
+      }
+    }, 400);
+  };
+
+  const selecionarIndicador = (item: any, tipo: "suplente" | "lideranca") => {
+    setIndicadorSelecionado({ id: item.id, nome: item.nome, tipo });
+    setIndicadorBusca(item.nome);
+    setIndicadorDropdownAberto(false);
+    setVisita(prev => ({ ...prev, quem_indicou: item.nome, indicador_tipo: tipo, indicador_id: item.id }));
+  };
+
+  const limparIndicador = () => {
+    setIndicadorSelecionado(null);
+    setIndicadorBusca("");
+    setVisita(prev => ({ ...prev, quem_indicou: "", indicador_tipo: null, indicador_id: null }));
+    setIndicadorResultados({ suplentes: [], liderancas: [] });
   };
 
   const handleSave = async () => {
@@ -299,14 +366,12 @@ export default function NovaVisita() {
         status: visita.status, responsavel_tratativa: visita.responsavel_tratativa || null,
         observacoes: visita.observacoes || null, cadastrado_por: nomeUsuario || "",
       };
-      // Add indicador fields only if columns exist (silently ignore if they don't)
       if (visita.indicador_tipo && visita.indicador_id) {
         visitaPayload.indicador_tipo = visita.indicador_tipo;
         visitaPayload.indicador_id = visita.indicador_id;
       }
       const { error: visitaError } = await supabase.from("visitas").insert(visitaPayload);
       if (visitaError) {
-        // If error is about unknown columns, retry without them
         if (visitaError.message?.includes("indicador_tipo") || visitaError.message?.includes("indicador_id")) {
           delete visitaPayload.indicador_tipo;
           delete visitaPayload.indicador_id;
@@ -314,6 +379,25 @@ export default function NovaVisita() {
           if (retryError) throw retryError;
         } else {
           throw visitaError;
+        }
+      }
+
+      // Sincronização com sistema externo (não bloqueia o fluxo principal)
+      if (visita.tipo_visitante && visita.tipo_visitante !== "eleitor") {
+        try {
+          const { data: syncResult } = await supabase.functions.invoke("sincronizar-visitante", {
+            body: {
+              tipo: visita.tipo_visitante,
+              nome: pessoa.nome,
+              cpf: pessoa.cpf,
+              whatsapp: pessoa.whatsapp || null,
+            },
+          });
+          if (syncResult?.acao === "criado") {
+            toast({ title: "🔗 Sincronizado!", description: `${pessoa.nome} cadastrado(a) no sistema de campanha.` });
+          }
+        } catch (e) {
+          console.warn("Sincronização externa falhou silenciosamente:", e);
         }
       }
 
@@ -325,7 +409,6 @@ export default function NovaVisita() {
     setSaving(false);
   };
 
-  // getStatusColor moved here, InputField/SelectField moved outside component
   const localGetStatusColor = (status: string) => {
     switch (status) {
       case "Aguardando": return "text-yellow-600 dark:text-yellow-400";
@@ -337,7 +420,6 @@ export default function NovaVisita() {
 
   return (
     <AppLayout>
-      {/* Header - show back arrow only when not home */}
       {!isHomePage && (
         <div className="flex items-center gap-3 mb-5">
           <button onClick={() => navigate(-1)} className="p-2 rounded-full hover:bg-muted active:scale-95 transition">
@@ -347,7 +429,6 @@ export default function NovaVisita() {
         </div>
       )}
 
-      {/* Status badges */}
       {pessoaStatus === "found" && (
         <div className="card-section mb-4 animate-fade-in">
           <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
@@ -360,7 +441,6 @@ export default function NovaVisita() {
         </div>
       )}
 
-      {/* ── Visit History ── */}
       {pessoaStatus === "found" && visitHistory.length > 0 && (
         <div className="card-section mb-4 animate-fade-in">
           <p className="text-sm font-bold text-primary uppercase tracking-wide mb-2">
@@ -382,11 +462,9 @@ export default function NovaVisita() {
         </div>
       )}
 
-      {/* ── Registration Form ── */}
       {showForm && (
         <div className="space-y-4 animate-fade-in">
 
-          {/* DADOS PESSOAIS */}
           {(formMode === "full" || isAdmin) && (
             <div className="card-section">
               <div className="flex items-center gap-2 mb-4">
@@ -400,14 +478,12 @@ export default function NovaVisita() {
                   if (raw.length <= 11) setPessoa({ ...pessoa, cpf: raw });
                 }} placeholder="000.000.000-00" />
                 <InputField label="WhatsApp" value={pessoa.whatsapp} onChange={(v) => setPessoa({ ...pessoa, whatsapp: maskPhone(v) })} placeholder="(00) 00000-0000" />
-                
                 <InputField label="Rede social (Instagram ou Facebook)" value={pessoa.instagram} onChange={(v) => setPessoa({ ...pessoa, instagram: v })} placeholder="@usuario ou link" />
                 <InputField label="Data de nascimento" value={pessoa.data_nascimento} onChange={(v) => setPessoa({ ...pessoa, data_nascimento: v })} type="date" />
               </div>
             </div>
           )}
 
-          {/* DADOS ELEITORAIS */}
           {(formMode === "full" || isAdmin) && (
             <div className="card-section">
               <div className="flex items-center justify-between mb-4">
@@ -437,7 +513,6 @@ export default function NovaVisita() {
             </div>
           )}
 
-          {/* Person summary for recepcao when person already exists */}
           {formMode === "visit_only" && !isAdmin && (
             <div className="card-section">
               <div className="flex items-center gap-2 mb-2">
@@ -459,10 +534,121 @@ export default function NovaVisita() {
             <div className="space-y-4">
               <InputField label="Data e hora" value={visita.data_hora} onChange={(v) => setVisita({ ...visita, data_hora: v })} type="datetime-local" />
               <InputField label="Assunto *" value={visita.assunto} onChange={(v) => setVisita({ ...visita, assunto: v })} placeholder="Descreva o motivo da visita" />
-              <QuemIndicouSelector
-                value={visita.quem_indicou}
-                onChange={(nome, tipo, id) => setVisita({ ...visita, quem_indicou: nome, indicador_tipo: tipo, indicador_id: id })}
-              />
+
+              {/* Quem indicou — busca via Edge Function */}
+              <div className="space-y-1.5 relative" ref={indicadorContainerRef}>
+                <label className="text-xs font-bold text-foreground">Quem indicou</label>
+                <div className="relative">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <input
+                    value={indicadorBusca}
+                    onChange={(e) => handleIndicadorInput(e.target.value)}
+                    onFocus={() => indicadorResultados.suplentes.length + indicadorResultados.liderancas.length > 0 && setIndicadorDropdownAberto(true)}
+                    placeholder="Buscar suplente ou liderança..."
+                    className="w-full h-12 rounded-lg bg-background border border-border pl-9 pr-10 text-sm outline-none focus:ring-2 focus:ring-primary/30 transition-shadow placeholder:text-muted-foreground/50"
+                  />
+                  {indicadorBuscando && (
+                    <Loader2 size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground animate-spin" />
+                  )}
+                  {indicadorSelecionado && !indicadorBuscando && (
+                    <button type="button" onClick={limparIndicador} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+
+                {indicadorSelecionado && (
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <span className={cn(
+                      "text-[10px] px-2 py-0.5 rounded-full font-semibold",
+                      indicadorSelecionado.tipo === "suplente"
+                        ? "bg-blue-500/15 text-blue-600"
+                        : "bg-green-500/15 text-green-600"
+                    )}>
+                      {indicadorSelecionado.tipo === "suplente" ? "Suplente" : "Liderança"}
+                    </span>
+                    <span className="text-xs text-muted-foreground">{indicadorSelecionado.nome}</span>
+                  </div>
+                )}
+
+                {indicadorDropdownAberto && (indicadorResultados.suplentes.length > 0 || indicadorResultados.liderancas.length > 0) && (
+                  <div className="absolute z-50 w-full mt-1 bg-card border border-border rounded-xl shadow-lg max-h-[280px] overflow-y-auto">
+                    {indicadorResultados.suplentes.length > 0 && (
+                      <>
+                        <div className="text-[10px] uppercase tracking-wide text-muted-foreground px-3 py-1.5 font-semibold border-b border-border/50 sticky top-0 bg-card">
+                          Suplentes
+                        </div>
+                        {indicadorResultados.suplentes.map((s: any) => (
+                          <button key={s.id} type="button" onClick={() => selecionarIndicador(s, "suplente")}
+                            className="w-full text-left px-3 py-2.5 hover:bg-muted flex items-center justify-between transition-colors cursor-pointer">
+                            <div>
+                              <span className="text-sm font-semibold">{s.nome}</span>
+                              {(s.numero_urna || s.partido) && (
+                                <span className="text-xs text-muted-foreground ml-2">
+                                  {[s.numero_urna, s.partido].filter(Boolean).join(" · ")}
+                                </span>
+                              )}
+                            </div>
+                            <span className="bg-blue-500/15 text-blue-600 text-[10px] px-1.5 py-0.5 rounded-full font-semibold flex-shrink-0">
+                              Suplente
+                            </span>
+                          </button>
+                        ))}
+                      </>
+                    )}
+                    {indicadorResultados.liderancas.length > 0 && (
+                      <>
+                        <div className="text-[10px] uppercase tracking-wide text-muted-foreground px-3 py-1.5 font-semibold border-b border-border/50 sticky top-0 bg-card">
+                          Lideranças
+                        </div>
+                        {indicadorResultados.liderancas.map((l: any) => (
+                          <button key={l.id} type="button" onClick={() => selecionarIndicador(l, "lideranca")}
+                            className="w-full text-left px-3 py-2.5 hover:bg-muted flex items-center justify-between transition-colors cursor-pointer">
+                            <div>
+                              <span className="text-sm font-semibold">{l.nome}</span>
+                              {l.regiao && (
+                                <span className="text-xs text-muted-foreground ml-2">{l.regiao}</span>
+                              )}
+                            </div>
+                            <span className="bg-green-500/15 text-green-600 text-[10px] px-1.5 py-0.5 rounded-full font-semibold flex-shrink-0">
+                              Liderança
+                            </span>
+                          </button>
+                        ))}
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Tipo do visitante */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-foreground">Tipo do visitante</label>
+                <div className="flex gap-2">
+                  {([
+                    { valor: "lideranca", emoji: "🤝", label: "Liderança" },
+                    { valor: "fiscal", emoji: "🗳️", label: "Fiscal" },
+                    { valor: "eleitor", emoji: "👤", label: "Eleitor" },
+                  ] as const).map((op) => (
+                    <button
+                      key={op.valor}
+                      type="button"
+                      onClick={() => setVisita(prev => ({
+                        ...prev,
+                        tipo_visitante: prev.tipo_visitante === op.valor ? "" : op.valor
+                      }))}
+                      className={cn(
+                        "flex-1 h-10 rounded-lg text-xs font-semibold border transition-all active:scale-95",
+                        visita.tipo_visitante === op.valor
+                          ? "bg-primary/15 border-primary/40 text-primary"
+                          : "bg-background border-border text-muted-foreground"
+                      )}
+                    >
+                      {op.emoji} {op.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
 
