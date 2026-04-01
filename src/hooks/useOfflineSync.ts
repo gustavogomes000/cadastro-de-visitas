@@ -3,6 +3,10 @@ import { db } from '@/lib/dexieDb';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
+/**
+ * Hook de sincronização assíncrona.
+ * Instanciar na barreira inicial do App.tsx ou Dashboard
+ */
 export function useOfflineSync() {
   useEffect(() => {
     const processSyncQueue = async () => {
@@ -82,10 +86,12 @@ export function useOfflineSync() {
 
     window.addEventListener('online', processSyncQueue);
     
+    // Tenta quando o componente é montado
     if (navigator.onLine) {
       processSyncQueue();
     }
 
+    // Processamento estático em loop (a cada 5min) para caso o evento window falhe
     const interval = setInterval(() => {
        if (navigator.onLine) processSyncQueue();
     }, 5 * 60 * 1000);

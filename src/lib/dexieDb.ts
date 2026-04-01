@@ -4,12 +4,12 @@ export interface SyncOperation {
   id?: number;
   table: string;
   action: 'INSERT' | 'UPDATE' | 'DELETE' | 'RPC';
-  payload: any;
+  payload: any; // O objeto inteiro de dados, ou os params do RPC
   timestamp: string;
   status: 'PENDING' | 'ERROR';
   retryCount: number;
   errorMessage?: string;
-  matchKey?: Record<string, any>;
+  matchKey?: Record<string, any>; // Para usar no .match() do supabase em Updates/Deletes
 }
 
 export class OfflineSyncDB extends Dexie {

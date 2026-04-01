@@ -17,6 +17,7 @@ export async function execOnlineOrEnqueue(
   if (navigator.onLine) {
     try {
       const response = await operation();
+      // Verificando response pattern supabase com .error
       if (response && response.error) {
          throw response.error;
       }
@@ -27,6 +28,7 @@ export async function execOnlineOrEnqueue(
     }
   }
 
+  // Fila offline fallback
   try {
     await db.syncQueue.add({
       action: offlineFallback.action,
@@ -41,6 +43,7 @@ export async function execOnlineOrEnqueue(
     toast.success('Modo Offline: ação salva. Será sincronizada automaticamente na reconexão da rede.');
     if (offlineFallback.onSuccess) offlineFallback.onSuccess();
 
+    // Fabricando um objeto neutro para o app não quebrar
     return { data: offlineFallback.payload, error: null };
   } catch (dbError) {
     console.error('CRITICAL: Falha ao inserir operação no IndexedDB de filas.', dbError);
