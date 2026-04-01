@@ -245,6 +245,7 @@ export default function NovaVisita() {
     setVisita({
       data_hora: getBrasiliaDateTime(),
       assunto: "", descricao_assunto: "", quem_indicou: "",
+      indicador_tipo: null, indicador_id: null,
       origem_visita: "", status: "Aguardando",
       responsavel_tratativa: "", observacoes: "",
     });
