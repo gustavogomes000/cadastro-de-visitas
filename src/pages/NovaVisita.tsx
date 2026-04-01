@@ -169,8 +169,8 @@ const SelectField = ({ label, value, onChange, options, placeholder }: {
 const EMPTY_PESSOA: DadosPessoa = {
   cpf: "", nome: "", data_nascimento: "", telefone: "", email: "",
   whatsapp: "", instagram: "", outras_redes: "",
-  titulo_eleitor: "", zona_eleitoral: "", secao_eleitoral: "",
-  municipio: "", uf: "", situacao_titulo: "", observacoes_gerais: "",
+  titulo_eleitor: "", zona_eleitoral: "", secao_eleitoral: "", colegio_eleitoral: "",
+  municipio: "", uf: "GO", situacao_titulo: "", observacoes_gerais: "",
 };
 
 export default function NovaVisita() {
