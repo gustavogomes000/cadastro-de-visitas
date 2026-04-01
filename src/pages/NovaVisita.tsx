@@ -198,9 +198,6 @@ export default function NovaVisita() {
   const [indicadorDropdownAberto, setIndicadorDropdownAberto] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const indicadorContainerRef = useRef<HTMLDivElement>(null);
-  const indicadorAbortRef = useRef<AbortController | null>(null);
-  const indicadorCacheRef = useRef<Map<string, IndicadorResultados>>(new Map());
-  const indicadorUltimoTermoRef = useRef("");
 
   const formMode = pessoaStatus === "found" ? "visit_only" : "full";
 
