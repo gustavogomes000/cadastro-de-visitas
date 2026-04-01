@@ -117,7 +117,7 @@ Deno.serve(async (req) => {
         return await linkExistingAuthUser(found.id);
       }
 
-      return json({ error: 'Erro ao criar usuário: ' + authError.message }, 500);
+      return json({ error: 'v6-notfound: ' + authError.message + ' email=' + email }, 500);
     }
 
     // New user created successfully
