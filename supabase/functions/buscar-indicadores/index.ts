@@ -39,7 +39,7 @@ Deno.serve(async (req) => {
     // All indicators come from hierarquia_usuarios table
     // suplentes have tipo='suplente', liderancas have tipo='lideranca' or 'coordenador'
     const hierResp = await fetch(
-      `${EXTERNAL_URL}/rest/v1/hierarquia_usuarios?select=id,nome,tipo&ativo=eq.true&tipo=in.(lideranca,suplente,coordenador)&nome=ilike.${encoded}&limit=30`,
+      `${EXTERNAL_URL}/rest/v1/hierarquia_usuarios?select=id,nome,tipo&tipo=in.(lideranca,suplente,coordenador)&nome=ilike.${encoded}&limit=30`,
       { headers: restHeaders }
     );
 
