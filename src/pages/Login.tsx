@@ -45,8 +45,6 @@ const hyperspeedPreset = {
   },
 };
 
-type TipoVisitante = "lideranca" | "fiscal" | "eleitor";
-
 export default function Login() {
   const { signIn } = useAuth();
   const { toast } = useToast();
