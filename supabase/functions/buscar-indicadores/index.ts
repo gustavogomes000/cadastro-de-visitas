@@ -1,5 +1,3 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -16,7 +14,7 @@ Deno.serve(async (req) => {
 
     if (!EXTERNAL_URL || !EXTERNAL_KEY) {
       return new Response(
-        JSON.stringify({ error: "Secrets não configurados" }),
+        JSON.stringify({ error: "Secrets não configurados", hasUrl: !!EXTERNAL_URL, hasKey: !!EXTERNAL_KEY }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -31,50 +29,43 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log("External URL:", EXTERNAL_URL);
-    console.log("Key length:", EXTERNAL_KEY?.length);
+    // Use REST API directly with service key
+    const restHeaders = {
+      apikey: EXTERNAL_KEY,
+      Authorization: `Bearer ${EXTERNAL_KEY}`,
+      "Content-Type": "application/json",
+    };
 
-    const supabase = createClient(EXTERNAL_URL, EXTERNAL_KEY);
+    const encoded = encodeURIComponent(`%${termo}%`);
 
-    // First test: query all suplentes without filter to check connection
-    const testResult = await supabase.from("suplentes").select("id, nome").limit(5);
-    console.log("Test query (no filter):", JSON.stringify(testResult));
+    // Query suplentes
+    const supUrl = `${EXTERNAL_URL}/rest/v1/suplentes?select=id,nome&nome=ilike.${encoded}&limit=15`;
+    const supResp = await fetch(supUrl, { headers: restHeaders });
+    const supText = await supResp.text();
+    console.log(`Suplentes [${supResp.status}]:`, supText.substring(0, 500));
 
-    // Query suplentes (has nome column directly)
-    const supResult = await supabase
-      .from("suplentes")
-      .select("id, nome")
-      .ilike("nome", `%${termo}%`)
-      .limit(15);
+    // Query hierarquia_usuarios
+    const hierUrl = `${EXTERNAL_URL}/rest/v1/hierarquia_usuarios?select=id,nome,tipo&ativo=eq.true&tipo=in.(lideranca,suplente,coordenador)&nome=ilike.${encoded}&limit=15`;
+    const hierResp = await fetch(hierUrl, { headers: restHeaders });
+    const hierText = await hierResp.text();
+    console.log(`Hierarquia [${hierResp.status}]:`, hierText.substring(0, 500));
 
-    console.log("Suplentes result:", JSON.stringify(supResult));
+    let supData = [];
+    let hierData = [];
+    try { supData = JSON.parse(supText); } catch {}
+    try { hierData = JSON.parse(hierText); } catch {}
 
-    // Query hierarquia_usuarios (has nome column directly)
-    const hierResult = await supabase
-      .from("hierarquia_usuarios")
-      .select("id, nome, tipo")
-      .eq("ativo", true)
-      .in("tipo", ["lideranca", "suplente", "coordenador"])
-      .ilike("nome", `%${termo}%`)
-      .limit(15);
-
-    console.log("Hierarquia result:", JSON.stringify(hierResult));
-
-    const suplentes = (supResult.data || []).map((s: any) => ({ id: s.id, nome: s.nome }));
-    
-    // From hierarquia, separate liderancas (exclude suplente type to avoid duplicates)
-    const liderancas = (hierResult.data || [])
-      .filter((h: any) => h.tipo === "lideranca" || h.tipo === "coordenador")
-      .map((h: any) => ({ id: h.id, nome: h.nome }));
-
-    console.log(`Busca "${termo}": ${suplentes.length} suplentes, ${liderancas.length} liderancas`);
+    const suplentes = Array.isArray(supData) ? supData.map((s: any) => ({ id: s.id, nome: s.nome })) : [];
+    const liderancas = Array.isArray(hierData)
+      ? hierData.filter((h: any) => h.tipo === "lideranca" || h.tipo === "coordenador").map((h: any) => ({ id: h.id, nome: h.nome }))
+      : [];
 
     return new Response(
-      JSON.stringify({ suplentes, liderancas }),
+      JSON.stringify({ suplentes, liderancas, debug: { supStatus: supResp.status, hierStatus: hierResp.status, supCount: supData.length, hierCount: hierData.length } }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
-    console.error("Erro buscar-indicadores:", error);
+    console.error("Erro:", error);
     return new Response(
       JSON.stringify({ error: error.message }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
