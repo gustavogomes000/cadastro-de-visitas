@@ -69,7 +69,32 @@ interface IndicadorResultados {
 
 const createEmptyIndicadorResultados = (): IndicadorResultados => ({ suplentes: [], liderancas: [] });
 
-const INDICADOR_DEBOUNCE_MS = 180;
+// Cache global para evitar re-fetch entre renders
+let indicadorCacheGlobal: IndicadorResultados | null = null;
+let indicadorCachePromise: Promise<IndicadorResultados> | null = null;
+
+async function fetchAllIndicadores(): Promise<IndicadorResultados> {
+  if (indicadorCacheGlobal) return indicadorCacheGlobal;
+  if (indicadorCachePromise) return indicadorCachePromise;
+
+  indicadorCachePromise = Promise.all([
+    fetch(`${EXTERNAL_FUNCTIONS_URL}/buscar-suplentes`, { method: "GET", headers: EXTERNAL_FUNCTIONS_HEADERS }).then(r => r.ok ? r.json() : []),
+    fetch(`${EXTERNAL_FUNCTIONS_URL}/buscar-liderancas-externo`, { method: "GET", headers: EXTERNAL_FUNCTIONS_HEADERS }).then(r => r.ok ? r.json() : []),
+  ]).then(([suplData, lidData]) => {
+    const result: IndicadorResultados = {
+      suplentes: (Array.isArray(suplData) ? suplData : []).map((s: any) => ({ id: s.id, nome: s.nome, numero_urna: s.numero_urna, partido: s.partido, regiao: s.regiao_atuacao })),
+      liderancas: (Array.isArray(lidData) ? lidData : []).map((l: any) => ({ id: l.id, nome: l.nome, regiao: l.regiao_atuacao })),
+    };
+    indicadorCacheGlobal = result;
+    indicadorCachePromise = null;
+    return result;
+  }).catch(() => {
+    indicadorCachePromise = null;
+    return createEmptyIndicadorResultados();
+  });
+
+  return indicadorCachePromise;
+}
 const SUPABASE_PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID || "hzhxrkurljrogxtzxmmb";
 const OWN_FUNCTIONS_URL = `https://${SUPABASE_PROJECT_ID}.supabase.co/functions/v1`;
 const EXTERNAL_FUNCTIONS_URL = "https://yvdfdmyusdhgtzfguxbj.supabase.co/functions/v1";
@@ -173,9 +198,6 @@ export default function NovaVisita() {
   const [indicadorDropdownAberto, setIndicadorDropdownAberto] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const indicadorContainerRef = useRef<HTMLDivElement>(null);
-  const indicadorAbortRef = useRef<AbortController | null>(null);
-  const indicadorCacheRef = useRef<Map<string, IndicadorResultados>>(new Map());
-  const indicadorUltimoTermoRef = useRef("");
 
   const formMode = pessoaStatus === "found" ? "visit_only" : "full";
 
@@ -200,10 +222,15 @@ export default function NovaVisita() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+  // Preload indicadores on mount
+  const allIndicadoresRef = useRef<IndicadorResultados>(createEmptyIndicadorResultados());
+  useEffect(() => {
+    fetchAllIndicadores().then(data => { allIndicadoresRef.current = data; });
+  }, []);
+
   useEffect(() => {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
-      indicadorAbortRef.current?.abort();
     };
   }, []);
 
@@ -324,7 +351,6 @@ export default function NovaVisita() {
 
   const clearSearch = () => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    indicadorAbortRef.current?.abort();
     setSearchInput("");
     setLocked(false);
     setPessoaStatus("idle");
@@ -337,7 +363,6 @@ export default function NovaVisita() {
     setIndicadorResultados(createEmptyIndicadorResultados());
     setIndicadorBuscando(false);
     setIndicadorDropdownAberto(false);
-    indicadorUltimoTermoRef.current = "";
     setVisita({
       data_hora: getBrasiliaDateTime(),
       assunto: "", descricao_assunto: "", quem_indicou: "",
@@ -356,9 +381,6 @@ export default function NovaVisita() {
     setIndicadorBusca(valor);
     setIndicadorSelecionado(null);
     setVisita(prev => ({ ...prev, quem_indicou: valor, indicador_tipo: null, indicador_id: null }));
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    indicadorAbortRef.current?.abort();
-    indicadorUltimoTermoRef.current = termoNormalizado;
 
     if (termo.length < 2) {
       setIndicadorBuscando(false);
@@ -367,83 +389,29 @@ export default function NovaVisita() {
       return;
     }
 
-    const cacheExato = indicadorCacheRef.current.get(termoNormalizado);
-    if (cacheExato) {
+    // If cache is loaded, filter instantly
+    const all = allIndicadoresRef.current;
+    if (all.suplentes.length > 0 || all.liderancas.length > 0) {
+      const filtered = filtrarIndicadoresPorTermo(all, termoNormalizado);
+      setIndicadorResultados(filtered);
+      setIndicadorDropdownAberto(hasIndicadorResultados(filtered));
       setIndicadorBuscando(false);
-      setIndicadorResultados(cacheExato);
-      setIndicadorDropdownAberto(hasIndicadorResultados(cacheExato));
       return;
     }
 
-    const cacheParcial = Array.from(indicadorCacheRef.current.entries())
-      .sort((a, b) => b[0].length - a[0].length)
-      .find(([cacheTermo]) => termoNormalizado.startsWith(cacheTermo));
-
-    if (cacheParcial) {
-      const resultadosFiltrados = filtrarIndicadoresPorTermo(cacheParcial[1], termoNormalizado);
-      setIndicadorResultados(resultadosFiltrados);
-      setIndicadorDropdownAberto(hasIndicadorResultados(resultadosFiltrados));
-    } else {
-      setIndicadorResultados(createEmptyIndicadorResultados());
-      setIndicadorDropdownAberto(false);
-    }
-
+    // Cache not loaded yet — fetch and filter
     setIndicadorBuscando(true);
-
-    debounceRef.current = setTimeout(async () => {
-      const controller = new AbortController();
-      indicadorAbortRef.current = controller;
-
-      try {
-        // Call both external endpoints in parallel
-        const [suplResp, lidResp] = await Promise.all([
-          fetch(`${EXTERNAL_FUNCTIONS_URL}/buscar-suplentes`, {
-            method: "GET",
-            headers: EXTERNAL_FUNCTIONS_HEADERS,
-            signal: controller.signal,
-          }),
-          fetch(`${EXTERNAL_FUNCTIONS_URL}/buscar-liderancas-externo`, {
-            method: "GET",
-            headers: EXTERNAL_FUNCTIONS_HEADERS,
-            signal: controller.signal,
-          }),
-        ]);
-
-        const suplData = suplResp.ok ? await suplResp.json() : [];
-        const lidData = lidResp.ok ? await lidResp.json() : [];
-
-        const suplentes: IndicadorResumo[] = (Array.isArray(suplData) ? suplData : [])
-          .filter((s: any) => s.nome?.toLowerCase().includes(termoNormalizado))
-          .map((s: any) => ({ id: s.id, nome: s.nome, numero_urna: s.numero_urna, partido: s.partido, regiao: s.regiao_atuacao }));
-
-        const liderancas: IndicadorResumo[] = (Array.isArray(lidData) ? lidData : [])
-          .filter((l: any) => l.nome?.toLowerCase().includes(termoNormalizado))
-          .map((l: any) => ({ id: l.id, nome: l.nome, regiao: l.regiao_atuacao }));
-
-        const data: IndicadorResultados = { suplentes, liderancas };
-        indicadorCacheRef.current.set(termoNormalizado, data);
-
-        if (indicadorUltimoTermoRef.current !== termoNormalizado) return;
-
-        setIndicadorResultados(data);
-        setIndicadorDropdownAberto(hasIndicadorResultados(data));
-      } catch (e) {
-        if (e instanceof Error && e.name === "AbortError") return;
-        console.error("Erro ao buscar indicadores:", e);
-        if (indicadorUltimoTermoRef.current === termoNormalizado) {
-          setIndicadorDropdownAberto(false);
-        }
-      } finally {
-        if (indicadorUltimoTermoRef.current === termoNormalizado) {
-          setIndicadorBuscando(false);
-        }
-      }
-    }, INDICADOR_DEBOUNCE_MS);
+    fetchAllIndicadores().then(data => {
+      allIndicadoresRef.current = data;
+      const filtered = filtrarIndicadoresPorTermo(data, termoNormalizado);
+      setIndicadorResultados(filtered);
+      setIndicadorDropdownAberto(hasIndicadorResultados(filtered));
+      setIndicadorBuscando(false);
+    });
   };
 
   const selecionarIndicador = (item: IndicadorResumo, tipo: IndicadorTipo) => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    indicadorAbortRef.current?.abort();
     setIndicadorBuscando(false);
     setIndicadorSelecionado({ id: item.id, nome: item.nome, tipo });
     setIndicadorBusca(item.nome);
@@ -453,14 +421,12 @@ export default function NovaVisita() {
 
   const limparIndicador = () => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    indicadorAbortRef.current?.abort();
     setIndicadorBuscando(false);
     setIndicadorSelecionado(null);
     setIndicadorBusca("");
     setVisita(prev => ({ ...prev, quem_indicou: "", indicador_tipo: null, indicador_id: null }));
     setIndicadorResultados(createEmptyIndicadorResultados());
     setIndicadorDropdownAberto(false);
-    indicadorUltimoTermoRef.current = "";
   };
 
   const handleSave = async () => {
