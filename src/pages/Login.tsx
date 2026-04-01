@@ -1,9 +1,5 @@
 import { useState, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
-import { supabaseExterno } from "@/integrations/supabase/clientExterno";
-import { maskCPF, unmaskCPF, validateCPF, maskPhone } from "@/lib/masks";
-import { useToast } from "@/hooks/use-toast";
 import candidataImg from "@/assets/candidata.jpg";
 import Hyperspeed from "@/components/Hyperspeed";
 
@@ -47,11 +43,9 @@ const hyperspeedPreset = {
   },
 };
 
-type TipoVisitante = "lideranca" | "fiscal" | "eleitor";
-
 export default function Login() {
   const { signIn } = useAuth();
-  const { toast } = useToast();
+  
   const [username, setUsername] = useState(() => localStorage.getItem("saved_user") || "");
   const [password, setPassword] = useState(() => localStorage.getItem("saved_pass") || "");
   const [showPassword, setShowPassword] = useState(false);
@@ -59,15 +53,6 @@ export default function Login() {
   const [error, setError] = useState("");
   const [remember, setRemember] = useState(() => !!localStorage.getItem("saved_user"));
 
-  // Auto-cadastro state
-  const [showCadastro, setShowCadastro] = useState(false);
-  const [tipo, setTipo] = useState<TipoVisitante | null>(null);
-  const [cadNome, setCadNome] = useState("");
-  const [cadCpf, setCadCpf] = useState("");
-  const [cadWhatsapp, setCadWhatsapp] = useState("");
-  const [cadLoading, setCadLoading] = useState(false);
-
-  const preset = useMemo(() => hyperspeedPreset, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -92,90 +77,7 @@ export default function Login() {
     setLoading(false);
   };
 
-  const handleCadastro = async () => {
-    if (!tipo) {
-      toast({ title: "Selecione o tipo de visitante", variant: "destructive" });
-      return;
-    }
-    if (!cadNome.trim()) {
-      toast({ title: "Nome é obrigatório", variant: "destructive" });
-      return;
-    }
-    const rawCpf = unmaskCPF(cadCpf);
-    if (!validateCPF(rawCpf)) {
-      toast({ title: "CPF inválido", variant: "destructive" });
-      return;
-    }
-
-    setCadLoading(true);
-    try {
-      const whatsappClean = cadWhatsapp.replace(/\D/g, "") || null;
-
-      if (tipo === "lideranca") {
-        const { data: existing } = await supabaseExterno
-          .from("liderancas")
-          .select("id, nome")
-          .eq("cpf", rawCpf)
-          .maybeSingle();
-        if (existing) {
-          toast({ title: `Presença confirmada! Bem-vindo(a) de volta, ${existing.nome}` });
-        } else {
-          const { error } = await supabaseExterno
-            .from("liderancas")
-            .insert({ nome: cadNome.trim(), cpf: rawCpf, whatsapp: whatsappClean });
-          if (error) throw error;
-          toast({ title: `Cadastro realizado! Bem-vindo(a), ${cadNome.trim()}` });
-        }
-      } else if (tipo === "fiscal") {
-        const { data: existing } = await supabaseExterno
-          .from("fiscais")
-          .select("id, nome")
-          .eq("cpf", rawCpf)
-          .maybeSingle();
-        if (existing) {
-          toast({ title: `Presença confirmada! Bem-vindo(a) de volta, ${existing.nome}` });
-        } else {
-          const { error } = await supabaseExterno
-            .from("fiscais")
-            .insert({ nome: cadNome.trim(), cpf: rawCpf, whatsapp: whatsappClean });
-          if (error) throw error;
-          toast({ title: `Cadastro realizado! Bem-vindo(a), ${cadNome.trim()}` });
-        }
-      } else {
-        // eleitor → pessoas local
-        const { data: existing } = await supabase
-          .from("pessoas")
-          .select("id, nome")
-          .eq("cpf", rawCpf)
-          .maybeSingle();
-        if (existing) {
-          toast({ title: "Presença confirmada!" });
-        } else {
-          const { error } = await supabase
-            .from("pessoas")
-            .insert({ nome: cadNome.trim(), cpf: rawCpf, whatsapp: whatsappClean, origem: "auto-cadastro-eleitor" });
-          if (error) throw error;
-          toast({ title: "Cadastro realizado!" });
-        }
-      }
-
-      // Limpar e fechar
-      setTipo(null);
-      setCadNome("");
-      setCadCpf("");
-      setCadWhatsapp("");
-      setShowCadastro(false);
-    } catch (err: any) {
-      toast({ title: "Erro ao cadastrar", description: err.message, variant: "destructive" });
-    }
-    setCadLoading(false);
-  };
-
-  const tipoOptions: { value: TipoVisitante; emoji: string; label: string }[] = [
-    { value: "lideranca", emoji: "🤝", label: "Liderança" },
-    { value: "fiscal", emoji: "🗳️", label: "Fiscal" },
-    { value: "eleitor", emoji: "👤", label: "Eleitor" },
-  ];
+  const preset = useMemo(() => hyperspeedPreset, []);
 
   return (
     <div
@@ -314,118 +216,6 @@ export default function Login() {
           </button>
         </form>
 
-        {/* ── Separador ── */}
-        <div className="flex items-center gap-3">
-          <div className="flex-1 h-px bg-white/10" />
-          <span className="text-[11px] text-white/30 font-medium">— ou —</span>
-          <div className="flex-1 h-px bg-white/10" />
-        </div>
-
-        {/* ── Auto-cadastro visitante ── */}
-        <div className="bg-white/[0.04] border border-white/[0.06] rounded-2xl p-5">
-          <button
-            type="button"
-            onClick={() => setShowCadastro(!showCadastro)}
-            className="w-full text-left"
-          >
-            <p className="text-sm font-semibold text-white/70">
-              {showCadastro ? "▾" : "▸"} Você é visitante? Registre sua presença
-            </p>
-          </button>
-
-          {showCadastro && (
-            <div className="mt-4 space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
-              {/* Tipo */}
-              <div className="space-y-1.5">
-                <label className="text-[11px] uppercase tracking-widest text-white/50 font-medium block">
-                  Tipo
-                </label>
-                <div className="flex gap-2">
-                  {tipoOptions.map((opt) => (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      onClick={() => setTipo(opt.value)}
-                      className={`flex-1 py-2.5 rounded-lg text-xs font-semibold border transition-all ${
-                        tipo === opt.value
-                          ? "bg-pink-500/20 border-pink-500/40 text-pink-300"
-                          : "bg-white/[0.05] border-white/[0.1] text-white/50"
-                      }`}
-                    >
-                      <span className="block text-base mb-0.5">{opt.emoji}</span>
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Nome */}
-              <div className="space-y-1.5">
-                <label className="text-[11px] uppercase tracking-widest text-white/50 font-medium block">
-                  Nome completo *
-                </label>
-                <input
-                  type="text"
-                  value={cadNome}
-                  onChange={(e) => setCadNome(e.target.value)}
-                  placeholder="Seu nome completo"
-                  className="w-full bg-white/[0.06] border border-white/[0.1] text-white placeholder:text-white/25 focus:border-pink-500/50 h-11 px-4 rounded-lg text-sm outline-none focus:ring-1 focus:ring-pink-500/20"
-                  style={{ fontSize: '16px' }}
-                />
-              </div>
-
-              {/* CPF */}
-              <div className="space-y-1.5">
-                <label className="text-[11px] uppercase tracking-widest text-white/50 font-medium block">
-                  CPF *
-                </label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={cadCpf}
-                  onChange={(e) => setCadCpf(maskCPF(e.target.value))}
-                  placeholder="000.000.000-00"
-                  className="w-full bg-white/[0.06] border border-white/[0.1] text-white placeholder:text-white/25 focus:border-pink-500/50 h-11 px-4 rounded-lg text-sm outline-none focus:ring-1 focus:ring-pink-500/20"
-                  style={{ fontSize: '16px' }}
-                />
-              </div>
-
-              {/* WhatsApp */}
-              <div className="space-y-1.5">
-                <label className="text-[11px] uppercase tracking-widest text-white/50 font-medium block">
-                  WhatsApp
-                </label>
-                <input
-                  type="text"
-                  inputMode="tel"
-                  value={cadWhatsapp}
-                  onChange={(e) => setCadWhatsapp(maskPhone(e.target.value))}
-                  placeholder="(00) 00000-0000"
-                  className="w-full bg-white/[0.06] border border-white/[0.1] text-white placeholder:text-white/25 focus:border-pink-500/50 h-11 px-4 rounded-lg text-sm outline-none focus:ring-1 focus:ring-pink-500/20"
-                  style={{ fontSize: '16px' }}
-                />
-              </div>
-
-              {/* Submit */}
-              <button
-                type="button"
-                onClick={handleCadastro}
-                disabled={cadLoading}
-                className="w-full h-11 rounded-lg font-semibold text-sm text-white transition-all active:scale-[0.98] disabled:opacity-60"
-                style={{ background: 'linear-gradient(to right, #ec4899, #fb7185)', boxShadow: '0 4px 16px hsl(340 82% 55% / 0.3)' }}
-              >
-                {cadLoading ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />
-                    Registrando...
-                  </span>
-                ) : (
-                  "Confirmar presença"
-                )}
-              </button>
-            </div>
-          )}
-        </div>
 
         <div className="text-center space-y-1">
           <p className="text-[10px] text-white/25">Pré-candidata a Deputada Estadual — GO 2026</p>
