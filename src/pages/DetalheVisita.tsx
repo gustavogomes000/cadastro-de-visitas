@@ -119,7 +119,7 @@ export default function DetalheVisita() {
           <InfoRow label="Nome" value={p?.nome} />
           <InfoRow label="CPF" value={p?.cpf && !p.cpf.startsWith("TEMP") ? maskCPF(p.cpf) : "–"} />
           <InfoRow label="Telefone" value={p?.telefone} />
-          <InfoRow label="E-mail" value={p?.email} />
+          
           <InfoRow label="Instagram" value={p?.instagram} />
           <InfoRow label="WhatsApp" value={p?.whatsapp} />
         </div>
