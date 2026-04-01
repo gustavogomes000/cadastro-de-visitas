@@ -1,7 +1,6 @@
 import { useState, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/hooks/use-toast";
+import candidataImg from "@/assets/candidata.jpg";
 import candidataImg from "@/assets/candidata.jpg";
 import Hyperspeed from "@/components/Hyperspeed";
 
