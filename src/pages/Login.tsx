@@ -45,7 +45,7 @@ const hyperspeedPreset = {
 
 export default function Login() {
   const { signIn } = useAuth();
-  const { toast } = useToast();
+  
   const [username, setUsername] = useState(() => localStorage.getItem("saved_user") || "");
   const [password, setPassword] = useState(() => localStorage.getItem("saved_pass") || "");
   const [showPassword, setShowPassword] = useState(false);
