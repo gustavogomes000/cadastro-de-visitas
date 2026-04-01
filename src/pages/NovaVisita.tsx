@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { AppLayout } from "@/components/AppLayout";
+import QuemIndicouSelector from "@/components/QuemIndicouSelector";
 import { ArrowLeft, Loader2, Lock, CheckCircle2, AlertCircle, User, Search, ExternalLink } from "lucide-react";
 import { maskCPF, unmaskCPF, maskPhone, maskTitulo, validateCPF } from "@/lib/masks";
 import { ASSUNTOS, ORIGENS_VISITA, STATUS_OPTIONS, UF_OPTIONS } from "@/lib/constants";
@@ -43,6 +44,8 @@ interface DadosVisita {
   assunto: string;
   descricao_assunto: string;
   quem_indicou: string;
+  indicador_tipo: "suplente" | "lideranca" | null;
+  indicador_id: string | null;
   origem_visita: string;
   status: string;
   responsavel_tratativa: string;
@@ -110,6 +113,7 @@ export default function NovaVisita() {
   const [visita, setVisita] = useState<DadosVisita>({
     data_hora: getBrasiliaDateTime(),
     assunto: "", descricao_assunto: "", quem_indicou: "",
+    indicador_tipo: null, indicador_id: null,
     origem_visita: "", status: "Aguardando",
     responsavel_tratativa: "", observacoes: "",
   });
@@ -241,6 +245,7 @@ export default function NovaVisita() {
     setVisita({
       data_hora: getBrasiliaDateTime(),
       assunto: "", descricao_assunto: "", quem_indicou: "",
+      indicador_tipo: null, indicador_id: null,
       origem_visita: "", status: "Aguardando",
       responsavel_tratativa: "", observacoes: "",
     });
@@ -286,15 +291,31 @@ export default function NovaVisita() {
         pid = novaPessoa.id;
       }
 
-      const { error: visitaError } = await supabase.from("visitas").insert({
+      const visitaPayload: Record<string, any> = {
         pessoa_id: pid,
         data_hora: visita.data_hora ? new Date(visita.data_hora).toISOString() : new Date().toISOString(),
         assunto: visita.assunto, descricao_assunto: visita.descricao_assunto || null,
         quem_indicou: visita.quem_indicou || null, origem_visita: visita.origem_visita || null,
         status: visita.status, responsavel_tratativa: visita.responsavel_tratativa || null,
         observacoes: visita.observacoes || null, cadastrado_por: nomeUsuario || "",
-      });
-      if (visitaError) throw visitaError;
+      };
+      // Add indicador fields only if columns exist (silently ignore if they don't)
+      if (visita.indicador_tipo && visita.indicador_id) {
+        visitaPayload.indicador_tipo = visita.indicador_tipo;
+        visitaPayload.indicador_id = visita.indicador_id;
+      }
+      const { error: visitaError } = await supabase.from("visitas").insert(visitaPayload);
+      if (visitaError) {
+        // If error is about unknown columns, retry without them
+        if (visitaError.message?.includes("indicador_tipo") || visitaError.message?.includes("indicador_id")) {
+          delete visitaPayload.indicador_tipo;
+          delete visitaPayload.indicador_id;
+          const { error: retryError } = await supabase.from("visitas").insert(visitaPayload);
+          if (retryError) throw retryError;
+        } else {
+          throw visitaError;
+        }
+      }
 
       toast({ title: "✅ Visita registrada!" });
       clearSearch();
@@ -438,7 +459,10 @@ export default function NovaVisita() {
             <div className="space-y-4">
               <InputField label="Data e hora" value={visita.data_hora} onChange={(v) => setVisita({ ...visita, data_hora: v })} type="datetime-local" />
               <InputField label="Assunto *" value={visita.assunto} onChange={(v) => setVisita({ ...visita, assunto: v })} placeholder="Descreva o motivo da visita" />
-              <InputField label="Quem indicou" value={visita.quem_indicou} onChange={(v) => setVisita({ ...visita, quem_indicou: v })} placeholder="Nome" />
+              <QuemIndicouSelector
+                value={visita.quem_indicou}
+                onChange={(nome, tipo, id) => setVisita({ ...visita, quem_indicou: nome, indicador_tipo: tipo, indicador_id: id })}
+              />
             </div>
           </div>
 
