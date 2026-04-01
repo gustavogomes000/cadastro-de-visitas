@@ -351,7 +351,6 @@ export default function NovaVisita() {
 
   const clearSearch = () => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    indicadorAbortRef.current?.abort();
     setSearchInput("");
     setLocked(false);
     setPessoaStatus("idle");
@@ -364,7 +363,6 @@ export default function NovaVisita() {
     setIndicadorResultados(createEmptyIndicadorResultados());
     setIndicadorBuscando(false);
     setIndicadorDropdownAberto(false);
-    indicadorUltimoTermoRef.current = "";
     setVisita({
       data_hora: getBrasiliaDateTime(),
       assunto: "", descricao_assunto: "", quem_indicou: "",
