@@ -163,7 +163,24 @@ export default function ConfigPage() {
     }
   };
 
-  const RoleIcon = ({ r }: { r: string }) => {
+  const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
+
+  const handleDeleteUser = async (authUserId: string, nome: string) => {
+    if (!confirm(`Tem certeza que deseja excluir o usuário "${nome}"? Esta ação não pode ser desfeita.`)) return;
+    setDeletingUserId(authUserId);
+    try {
+      const { data, error } = await supabase.functions.invoke("criar-usuario", {
+        body: { action: "delete", user_id: authUserId },
+      });
+      if (error || data?.error) throw new Error(data?.error || error?.message);
+      toast({ title: "Sucesso!", description: `Usuário "${nome}" deletado.` });
+      loadUsuarios();
+    } catch (err: any) {
+      toast({ title: "Erro ao deletar", description: err.message, variant: "destructive" });
+    }
+    setDeletingUserId(null);
+  };
+
     if (r === "admin") return <Shield size={14} className="text-primary" />;
     return <Headset size={14} className="text-muted-foreground" />;
   };
