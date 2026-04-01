@@ -386,9 +386,6 @@ export default function NovaVisita() {
     setIndicadorBusca(valor);
     setIndicadorSelecionado(null);
     setVisita(prev => ({ ...prev, quem_indicou: valor, indicador_tipo: null, indicador_id: null }));
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    indicadorAbortRef.current?.abort();
-    indicadorUltimoTermoRef.current = termoNormalizado;
 
     if (termo.length < 2) {
       setIndicadorBuscando(false);
@@ -397,78 +394,25 @@ export default function NovaVisita() {
       return;
     }
 
-    const cacheExato = indicadorCacheRef.current.get(termoNormalizado);
-    if (cacheExato) {
+    // If cache is loaded, filter instantly
+    const all = allIndicadoresRef.current;
+    if (all.suplentes.length > 0 || all.liderancas.length > 0) {
+      const filtered = filtrarIndicadoresPorTermo(all, termoNormalizado);
+      setIndicadorResultados(filtered);
+      setIndicadorDropdownAberto(hasIndicadorResultados(filtered));
       setIndicadorBuscando(false);
-      setIndicadorResultados(cacheExato);
-      setIndicadorDropdownAberto(hasIndicadorResultados(cacheExato));
       return;
     }
 
-    const cacheParcial = Array.from(indicadorCacheRef.current.entries())
-      .sort((a, b) => b[0].length - a[0].length)
-      .find(([cacheTermo]) => termoNormalizado.startsWith(cacheTermo));
-
-    if (cacheParcial) {
-      const resultadosFiltrados = filtrarIndicadoresPorTermo(cacheParcial[1], termoNormalizado);
-      setIndicadorResultados(resultadosFiltrados);
-      setIndicadorDropdownAberto(hasIndicadorResultados(resultadosFiltrados));
-    } else {
-      setIndicadorResultados(createEmptyIndicadorResultados());
-      setIndicadorDropdownAberto(false);
-    }
-
+    // Cache not loaded yet — fetch and filter
     setIndicadorBuscando(true);
-
-    debounceRef.current = setTimeout(async () => {
-      const controller = new AbortController();
-      indicadorAbortRef.current = controller;
-
-      try {
-        // Call both external endpoints in parallel
-        const [suplResp, lidResp] = await Promise.all([
-          fetch(`${EXTERNAL_FUNCTIONS_URL}/buscar-suplentes`, {
-            method: "GET",
-            headers: EXTERNAL_FUNCTIONS_HEADERS,
-            signal: controller.signal,
-          }),
-          fetch(`${EXTERNAL_FUNCTIONS_URL}/buscar-liderancas-externo`, {
-            method: "GET",
-            headers: EXTERNAL_FUNCTIONS_HEADERS,
-            signal: controller.signal,
-          }),
-        ]);
-
-        const suplData = suplResp.ok ? await suplResp.json() : [];
-        const lidData = lidResp.ok ? await lidResp.json() : [];
-
-        const suplentes: IndicadorResumo[] = (Array.isArray(suplData) ? suplData : [])
-          .filter((s: any) => s.nome?.toLowerCase().includes(termoNormalizado))
-          .map((s: any) => ({ id: s.id, nome: s.nome, numero_urna: s.numero_urna, partido: s.partido, regiao: s.regiao_atuacao }));
-
-        const liderancas: IndicadorResumo[] = (Array.isArray(lidData) ? lidData : [])
-          .filter((l: any) => l.nome?.toLowerCase().includes(termoNormalizado))
-          .map((l: any) => ({ id: l.id, nome: l.nome, regiao: l.regiao_atuacao }));
-
-        const data: IndicadorResultados = { suplentes, liderancas };
-        indicadorCacheRef.current.set(termoNormalizado, data);
-
-        if (indicadorUltimoTermoRef.current !== termoNormalizado) return;
-
-        setIndicadorResultados(data);
-        setIndicadorDropdownAberto(hasIndicadorResultados(data));
-      } catch (e) {
-        if (e instanceof Error && e.name === "AbortError") return;
-        console.error("Erro ao buscar indicadores:", e);
-        if (indicadorUltimoTermoRef.current === termoNormalizado) {
-          setIndicadorDropdownAberto(false);
-        }
-      } finally {
-        if (indicadorUltimoTermoRef.current === termoNormalizado) {
-          setIndicadorBuscando(false);
-        }
-      }
-    }, INDICADOR_DEBOUNCE_MS);
+    fetchAllIndicadores().then(data => {
+      allIndicadoresRef.current = data;
+      const filtered = filtrarIndicadoresPorTermo(data, termoNormalizado);
+      setIndicadorResultados(filtered);
+      setIndicadorDropdownAberto(hasIndicadorResultados(filtered));
+      setIndicadorBuscando(false);
+    });
   };
 
   const selecionarIndicador = (item: IndicadorResumo, tipo: IndicadorTipo) => {
