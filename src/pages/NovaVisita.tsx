@@ -395,7 +395,18 @@ export default function NovaVisita() {
       indicadorAbortRef.current = controller;
 
       try {
-        const data = await buscarIndicadoresDirecto(termo);
+        const resp = await fetch(`${OWN_FUNCTIONS_URL}/buscar-indicadores`, {
+          method: "POST",
+          headers: OWN_FUNCTIONS_HEADERS,
+          body: JSON.stringify({ termo }),
+          signal: controller.signal,
+        });
+
+        if (!resp.ok) {
+          throw new Error(`Falha ao buscar indicadores (${resp.status})`);
+        }
+
+        const data = normalizeIndicadorResultados(await resp.json());
         indicadorCacheRef.current.set(termoNormalizado, data);
 
         if (indicadorUltimoTermoRef.current !== termoNormalizado) return;
