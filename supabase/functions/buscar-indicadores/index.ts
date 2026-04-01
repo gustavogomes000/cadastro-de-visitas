@@ -13,8 +13,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const EXTERNO_KEY = Deno.env.get("EXTERNO_SUPABASE_SERVICE_ROLE_KEY");
-    if (!EXTERNO_KEY) {
+    const EXTERNO_KEY = Deno.env.get("EXTERNO_SUPABASE_SERVICE_ROLE_KEY") ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
       return new Response(JSON.stringify({ error: "Chave do Supabase externo não configurada" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
