@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { supabaseExterno } from "@/integrations/supabase/clientExterno";
-import { X, Search, Loader2 } from "lucide-react";
+import { X, Search, Loader2, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Suplente {
@@ -31,11 +31,11 @@ interface QuemIndicouSelectorProps {
 export default function QuemIndicouSelector({ value, onChange }: QuemIndicouSelectorProps) {
   const [inputValue, setInputValue] = useState(value);
   const [selected, setSelected] = useState<SelectedIndicador | null>(null);
-  const [suplentes, setSuplentes] = useState<Suplente[]>([]);
-  const [liderancas, setLiderancas] = useState<Lideranca[]>([]);
+  const [allSuplentes, setAllSuplentes] = useState<Suplente[]>([]);
+  const [allLiderancas, setAllLiderancas] = useState<Lideranca[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const [open, setOpen] = useState(false);
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Sync external value
@@ -56,43 +56,51 @@ export default function QuemIndicouSelector({ value, onChange }: QuemIndicouSele
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  const search = useCallback(async (term: string) => {
-    if (term.length < 2) {
-      setSuplentes([]);
-      setLiderancas([]);
-      setOpen(false);
-      return;
-    }
+  // Load all data once
+  const loadAll = useCallback(async () => {
+    if (loaded) return;
     setLoading(true);
     try {
       const [supRes, lidRes] = await Promise.all([
         supabaseExterno
           .from("suplentes")
           .select("id, nome, numero_urna, partido")
-          .ilike("nome", `%${term}%`)
-          .limit(5),
+          .order("nome"),
         supabaseExterno
           .from("liderancas")
           .select("id, nome, regiao, whatsapp")
-          .ilike("nome", `%${term}%`)
-          .limit(5),
+          .order("nome"),
       ]);
-      setSuplentes((supRes.data as Suplente[]) || []);
-      setLiderancas((lidRes.data as Lideranca[]) || []);
-      setOpen(true);
+      setAllSuplentes((supRes.data as Suplente[]) || []);
+      setAllLiderancas((lidRes.data as Lideranca[]) || []);
+      setLoaded(true);
     } catch {
-      setSuplentes([]);
-      setLiderancas([]);
+      // silently fail
     }
     setLoading(false);
-  }, []);
+  }, [loaded]);
+
+  // Filter based on input
+  const term = inputValue.trim().toLowerCase();
+  const filteredSuplentes = term
+    ? allSuplentes.filter((s) => s.nome.toLowerCase().includes(term))
+    : allSuplentes;
+  const filteredLiderancas = term
+    ? allLiderancas.filter((l) => l.nome.toLowerCase().includes(term))
+    : allLiderancas;
+
+  const hasResults = filteredSuplentes.length > 0 || filteredLiderancas.length > 0;
+
+  const handleFocus = async () => {
+    await loadAll();
+    setOpen(true);
+  };
 
   const handleInputChange = (val: string) => {
     setInputValue(val);
     setSelected(null);
     onChange(val, null, null);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => search(val.trim()), 400);
+    if (!open) setOpen(true);
   };
 
   const handleSelect = (nome: string, tipo: "suplente" | "lideranca", id: string) => {
@@ -106,11 +114,7 @@ export default function QuemIndicouSelector({ value, onChange }: QuemIndicouSele
     setSelected(null);
     setInputValue("");
     onChange("", null, null);
-    setSuplentes([]);
-    setLiderancas([]);
   };
-
-  const hasResults = suplentes.length > 0 || liderancas.length > 0;
 
   return (
     <div className="space-y-1.5" ref={containerRef}>
@@ -140,23 +144,27 @@ export default function QuemIndicouSelector({ value, onChange }: QuemIndicouSele
               type="text"
               value={inputValue}
               onChange={(e) => handleInputChange(e.target.value)}
-              onFocus={() => { if (hasResults) setOpen(true); }}
+              onFocus={handleFocus}
               placeholder="Buscar suplente ou liderança..."
-              className="w-full h-12 rounded-lg bg-background border border-border pl-9 pr-8 text-sm outline-none focus:ring-2 focus:ring-primary/30 transition-shadow placeholder:text-muted-foreground/50"
+              className="w-full h-12 rounded-lg bg-background border border-border pl-9 pr-10 text-sm outline-none focus:ring-2 focus:ring-primary/30 transition-shadow placeholder:text-muted-foreground/50"
             />
-            {loading && <Loader2 size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground animate-spin" />}
+            {loading ? (
+              <Loader2 size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground animate-spin" />
+            ) : (
+              <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/50" />
+            )}
           </div>
         )}
 
         {/* Dropdown */}
         {open && hasResults && !selected && (
           <div className="absolute z-50 left-0 right-0 mt-1 bg-card border border-border rounded-xl shadow-lg max-h-[280px] overflow-y-auto">
-            {suplentes.length > 0 && (
+            {filteredSuplentes.length > 0 && (
               <>
                 <div className="text-[10px] uppercase tracking-wide text-muted-foreground px-3 py-1.5 font-semibold sticky top-0 bg-card">
                   Suplentes
                 </div>
-                {suplentes.map((s) => (
+                {filteredSuplentes.map((s) => (
                   <button
                     key={`sup-${s.id}`}
                     type="button"
@@ -178,12 +186,12 @@ export default function QuemIndicouSelector({ value, onChange }: QuemIndicouSele
                 ))}
               </>
             )}
-            {liderancas.length > 0 && (
+            {filteredLiderancas.length > 0 && (
               <>
                 <div className="text-[10px] uppercase tracking-wide text-muted-foreground px-3 py-1.5 font-semibold sticky top-0 bg-card">
                   Lideranças
                 </div>
-                {liderancas.map((l) => (
+                {filteredLiderancas.map((l) => (
                   <button
                     key={`lid-${l.id}`}
                     type="button"
