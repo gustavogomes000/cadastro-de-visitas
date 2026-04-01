@@ -109,7 +109,7 @@ Deno.serve(async (req) => {
       const { data: listData, error: listErr } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
       if (listErr) {
         console.error('listUsers error:', listErr);
-        return json({ error: 'Erro ao criar usuário: ' + authError.message }, 500);
+        return json({ error: 'v6-listErr: ' + authError.message }, 500);
       }
 
       const found = listData?.users?.find((u: any) => u.email === email);
