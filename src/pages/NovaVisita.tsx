@@ -395,18 +395,32 @@ export default function NovaVisita() {
       indicadorAbortRef.current = controller;
 
       try {
-        const resp = await fetch(`${OWN_FUNCTIONS_URL}/buscar-indicadores`, {
-          method: "POST",
-          headers: OWN_FUNCTIONS_HEADERS,
-          body: JSON.stringify({ termo }),
-          signal: controller.signal,
-        });
+        // Call both external endpoints in parallel
+        const [suplResp, lidResp] = await Promise.all([
+          fetch(`${EXTERNAL_FUNCTIONS_URL}/buscar-suplentes`, {
+            method: "GET",
+            headers: EXTERNAL_FUNCTIONS_HEADERS,
+            signal: controller.signal,
+          }),
+          fetch(`${EXTERNAL_FUNCTIONS_URL}/buscar-liderancas-externo`, {
+            method: "GET",
+            headers: EXTERNAL_FUNCTIONS_HEADERS,
+            signal: controller.signal,
+          }),
+        ]);
 
-        if (!resp.ok) {
-          throw new Error(`Falha ao buscar indicadores (${resp.status})`);
-        }
+        const suplData = suplResp.ok ? await suplResp.json() : [];
+        const lidData = lidResp.ok ? await lidResp.json() : [];
 
-        const data = normalizeIndicadorResultados(await resp.json());
+        const suplentes: IndicadorResumo[] = (Array.isArray(suplData) ? suplData : [])
+          .filter((s: any) => s.nome?.toLowerCase().includes(termoNormalizado))
+          .map((s: any) => ({ id: s.id, nome: s.nome, numero_urna: s.numero_urna, partido: s.partido, regiao: s.regiao_atuacao }));
+
+        const liderancas: IndicadorResumo[] = (Array.isArray(lidData) ? lidData : [])
+          .filter((l: any) => l.nome?.toLowerCase().includes(termoNormalizado))
+          .map((l: any) => ({ id: l.id, nome: l.nome, regiao: l.regiao_atuacao }));
+
+        const data: IndicadorResultados = { suplentes, liderancas };
         indicadorCacheRef.current.set(termoNormalizado, data);
 
         if (indicadorUltimoTermoRef.current !== termoNormalizado) return;
