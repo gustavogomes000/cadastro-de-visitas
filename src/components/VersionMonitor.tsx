@@ -23,23 +23,5 @@ export default function VersionMonitor() {
     return () => clearInterval(interval);
   }, []);
 
-  return (
-    <div
-      style={{
-        position: "fixed",
-        bottom: "4px",
-        right: "4px",
-        fontSize: "10px",
-        color: "rgba(255,255,255,0.4)",
-        zIndex: 99999,
-        pointerEvents: "none",
-        fontFamily: "monospace",
-        fontWeight: 600,
-        textShadow: "0px 1px 2px rgba(0,0,0,0.8)"
-      }}
-      title="Monitor de Versão (Atualização Automática)"
-    >
-      v.{version}
-    </div>
-  );
+  return null;
 }
