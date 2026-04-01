@@ -1,5 +1,3 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -11,45 +9,42 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const EXTERNO_URL = Deno.env.get("SUPABASE_URL")!;
-    const EXTERNO_KEY = Deno.env.get("EXTERNO_SUPABASE_SERVICE_ROLE_KEY") ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const EXTERNAL_URL = Deno.env.get("EXTERNAL_SUPABASE_URL");
+    const EXTERNAL_KEY = Deno.env.get("EXTERNAL_SUPABASE_SERVICE_KEY");
 
-    const { tipo, nome, cpf, whatsapp } = await req.json();
-
-    if (!tipo || tipo === "eleitor" || !cpf) {
-      return new Response(JSON.stringify({ ok: true, acao: "ignorado" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    if (!EXTERNAL_URL || !EXTERNAL_KEY) {
+      return new Response(
+        JSON.stringify({ ok: false, erro: "Secrets EXTERNAL_SUPABASE_URL ou EXTERNAL_SUPABASE_SERVICE_KEY não configurados" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
-    const tabela = tipo === "lideranca" ? "liderancas" : "fiscais";
-    const externo = createClient(EXTERNO_URL, EXTERNO_KEY);
+    const body = await req.json();
+    const { tipo, nome, cpf, whatsapp, indicador_tipo, indicador_id } = body;
 
-    const cpfLimpo = cpf.replace(/\D/g, "");
-    const { data: existente } = await externo.from(tabela).select("id").eq("cpf", cpfLimpo).maybeSingle();
-
-    if (existente) {
-      return new Response(JSON.stringify({ ok: true, acao: "ja_existe" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const { error } = await externo.from(tabela).insert({ nome, cpf: cpfLimpo, whatsapp: whatsapp || null });
-
-    if (error) {
-      return new Response(JSON.stringify({ ok: false, erro: error.message }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    return new Response(JSON.stringify({ ok: true, acao: "criado" }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    // Proxy para a Edge Function do banco externo
+    const response = await fetch(`${EXTERNAL_URL}/functions/v1/sincronizar-visitante`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${EXTERNAL_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ tipo, nome, cpf, whatsapp, indicador_tipo, indicador_id }),
     });
+
+    const data = await response.json();
+
+    return new Response(
+      JSON.stringify(data),
+      {
+        status: response.ok ? 200 : response.status,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }
+    );
   } catch (error) {
-    return new Response(JSON.stringify({ ok: false, erro: error.message }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({ ok: false, erro: error.message }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
   }
 });

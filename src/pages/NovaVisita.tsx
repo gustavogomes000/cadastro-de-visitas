@@ -383,7 +383,7 @@ export default function NovaVisita() {
       }
 
       // Sincronização com sistema externo (não bloqueia o fluxo principal)
-      if (visita.tipo_visitante && visita.tipo_visitante !== "eleitor") {
+      if (visita.tipo_visitante) {
         try {
           const { data: syncResult } = await supabase.functions.invoke("sincronizar-visitante", {
             body: {
@@ -391,10 +391,14 @@ export default function NovaVisita() {
               nome: pessoa.nome,
               cpf: pessoa.cpf,
               whatsapp: pessoa.whatsapp || null,
+              indicador_tipo: visita.indicador_tipo || null,
+              indicador_id: visita.indicador_id || null,
             },
           });
           if (syncResult?.acao === "criado") {
             toast({ title: "🔗 Sincronizado!", description: `${pessoa.nome} cadastrado(a) no sistema de campanha.` });
+          } else if (syncResult?.acao === "ja_existe") {
+            toast({ title: "ℹ️ Já cadastrado", description: `${pessoa.nome} já existe no sistema principal.` });
           }
         } catch (e) {
           console.warn("Sincronização externa falhou silenciosamente:", e);
