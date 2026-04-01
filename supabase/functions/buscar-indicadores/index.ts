@@ -22,7 +22,19 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const termo = (body.termo || body.busca || "").trim();
 
-    if (!termo || termo.length < 2) {
+    // Debug mode
+    if (!termo || termo === "debug") {
+      const r = await fetch(`${EXTERNAL_URL}/rest/v1/hierarquia_usuarios?select=id,nome,tipo&limit=5`, {
+        headers: { apikey: EXTERNAL_KEY, Authorization: `Bearer ${EXTERNAL_KEY}` },
+      });
+      const d = await r.text();
+      return new Response(
+        JSON.stringify({ status: r.status, data: d.substring(0, 1000), key_start: EXTERNAL_KEY.substring(0, 30) }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (termo.length < 2) {
       return new Response(
         JSON.stringify({ suplentes: [], liderancas: [] }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
