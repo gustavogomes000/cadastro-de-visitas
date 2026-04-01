@@ -1,7 +1,6 @@
 import { useState, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import candidataImg from "@/assets/candidata.jpg";
-import candidataImg from "@/assets/candidata.jpg";
 import Hyperspeed from "@/components/Hyperspeed";
 
 const APP_TITLE = "Recepção do Comitê";
