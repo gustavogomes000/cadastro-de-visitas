@@ -289,11 +289,21 @@ export default function NovaVisita() {
     debounceRef.current = setTimeout(async () => {
       setIndicadorBuscando(true);
       try {
-        const { data } = await supabase.functions.invoke("buscar-indicadores", {
-          body: { termo: valor.trim() },
+        const resp = await fetch("https://yvdfdmyusdhgtzfguxbj.supabase.co/functions/v1/buscar-indicadores", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "apikey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl2ZGZkbXl1c2RoZ3R6Zmd1eGJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0OTg4MzksImV4cCI6MjA4OTA3NDgzOX0.-xSNbj5kLibkhJoXmOXjfmYPKBB-gqasQgy322Kk-n4",
+            "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl2ZGZkbXl1c2RoZ3R6Zmd1eGJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0OTg4MzksImV4cCI6MjA4OTA3NDgzOX0.-xSNbj5kLibkhJoXmOXjfmYPKBB-gqasQgy322Kk-n4",
+          },
+          body: JSON.stringify({ termo: valor.trim() }),
         });
+        const data = await resp.json();
         if (data) {
-          setIndicadorResultados(data);
+          setIndicadorResultados({
+            suplentes: data.suplentes || [],
+            liderancas: data.liderancas || [],
+          });
           setIndicadorDropdownAberto(true);
         }
       } catch (e) {
@@ -301,7 +311,7 @@ export default function NovaVisita() {
       } finally {
         setIndicadorBuscando(false);
       }
-    }, 400);
+    }, 300);
   };
 
   const selecionarIndicador = (item: any, tipo: "suplente" | "lideranca") => {
@@ -382,27 +392,32 @@ export default function NovaVisita() {
         }
       }
 
-      // Sincronização com sistema externo (não bloqueia o fluxo principal)
-      if (visita.tipo_visitante) {
-        try {
-          const { data: syncResult } = await supabase.functions.invoke("sincronizar-visitante", {
-            body: {
-              tipo: visita.tipo_visitante,
-              nome: pessoa.nome,
-              cpf: pessoa.cpf,
-              whatsapp: pessoa.whatsapp || null,
-              indicador_tipo: visita.indicador_tipo || null,
-              indicador_id: visita.indicador_id || null,
-            },
-          });
-          if (syncResult?.acao === "criado") {
+      // Sincronização fire-and-forget com sistema principal
+      if (visita.tipo_visitante && visita.indicador_tipo && visita.indicador_id) {
+        fetch("https://yvdfdmyusdhgtzfguxbj.supabase.co/functions/v1/sincronizar-visitante", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "apikey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl2ZGZkbXl1c2RoZ3R6Zmd1eGJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0OTg4MzksImV4cCI6MjA4OTA3NDgzOX0.-xSNbj5kLibkhJoXmOXjfmYPKBB-gqasQgy322Kk-n4",
+            "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl2ZGZkbXl1c2RoZ3R6Zmd1eGJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0OTg4MzksImV4cCI6MjA4OTA3NDgzOX0.-xSNbj5kLibkhJoXmOXjfmYPKBB-gqasQgy322Kk-n4",
+          },
+          body: JSON.stringify({
+            tipo: visita.tipo_visitante,
+            nome: pessoa.nome,
+            cpf: pessoa.cpf || null,
+            whatsapp: pessoa.whatsapp || null,
+            indicador_tipo: visita.indicador_tipo,
+            indicador_id: visita.indicador_id,
+          }),
+        }).then(r => r.json()).then(data => {
+          if (data.acao === "criado") {
             toast({ title: "🔗 Sincronizado!", description: `${pessoa.nome} cadastrado(a) no sistema de campanha.` });
-          } else if (syncResult?.acao === "ja_existe") {
+          } else if (data.acao === "ja_existe") {
             toast({ title: "ℹ️ Já cadastrado", description: `${pessoa.nome} já existe no sistema principal.` });
           }
-        } catch (e) {
-          console.warn("Sincronização externa falhou silenciosamente:", e);
-        }
+        }).catch(err => {
+          console.error("Erro na sincronização:", err);
+        });
       }
 
       toast({ title: "✅ Visita registrada!" });
