@@ -1,9 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { corsHeaders } from "@supabase/supabase-js/cors";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -11,31 +6,64 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const EXTERNO_URL = Deno.env.get("SUPABASE_URL")!;
-    const EXTERNO_KEY = Deno.env.get("EXTERNO_SUPABASE_SERVICE_ROLE_KEY") ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const EXTERNAL_URL = Deno.env.get("EXTERNAL_SUPABASE_URL");
+    const EXTERNAL_KEY = Deno.env.get("EXTERNAL_SUPABASE_SERVICE_KEY");
 
-    const { termo } = await req.json();
-    if (!termo || termo.trim().length < 2) {
-      return new Response(JSON.stringify({ suplentes: [], liderancas: [] }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    if (!EXTERNAL_URL || !EXTERNAL_KEY) {
+      return new Response(
+        JSON.stringify({ error: "Secrets EXTERNAL_SUPABASE_URL ou EXTERNAL_SUPABASE_SERVICE_KEY não configurados" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
-    const externo = createClient(EXTERNO_URL, EXTERNO_KEY);
+    const body = await req.json();
+    const termo = body.termo || body.busca || "";
 
-    const [{ data: suplentes }, { data: liderancas }] = await Promise.all([
-      externo.from("suplentes").select("id, nome, numero_urna, partido").ilike("nome", `%${termo}%`).limit(6),
-      externo.from("liderancas").select("id, nome, regiao, whatsapp").ilike("nome", `%${termo}%`).limit(6),
-    ]);
+    if (!termo || termo.trim().length < 2) {
+      return new Response(
+        JSON.stringify({ suplentes: [], liderancas: [] }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Proxy para a Edge Function do banco externo
+    const response = await fetch(`${EXTERNAL_URL}/functions/v1/buscar-indicadores`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${EXTERNAL_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ busca: termo.trim() }),
+    });
+
+    const data = await response.json();
+
+    // Normalizar resposta: a função externa pode retornar { resultados: [...] } ou { suplentes, liderancas }
+    let suplentes: any[] = [];
+    let liderancas: any[] = [];
+
+    if (data.resultados && Array.isArray(data.resultados)) {
+      // Formato com lista unificada com campo "tipo"
+      for (const item of data.resultados) {
+        if (item.tipo === "suplente") {
+          suplentes.push(item);
+        } else if (item.tipo === "lideranca") {
+          liderancas.push(item);
+        }
+      }
+    } else {
+      suplentes = data.suplentes || [];
+      liderancas = data.liderancas || [];
+    }
 
     return new Response(
-      JSON.stringify({ suplentes: suplentes ?? [], liderancas: liderancas ?? [] }),
+      JSON.stringify({ suplentes, liderancas }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({ error: error.message }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
   }
 });
