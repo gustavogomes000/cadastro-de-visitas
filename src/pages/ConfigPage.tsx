@@ -39,6 +39,7 @@ export default function ConfigPage() {
 
   // Expanded user
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
+  const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
 
   useEffect(() => {
     const isDark = document.documentElement.classList.contains("dark");
