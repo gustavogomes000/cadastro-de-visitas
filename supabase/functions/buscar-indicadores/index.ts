@@ -31,7 +31,14 @@ Deno.serve(async (req) => {
       );
     }
 
+    console.log("External URL:", EXTERNAL_URL);
+    console.log("Key length:", EXTERNAL_KEY?.length);
+
     const supabase = createClient(EXTERNAL_URL, EXTERNAL_KEY);
+
+    // First test: query all suplentes without filter to check connection
+    const testResult = await supabase.from("suplentes").select("id, nome").limit(5);
+    console.log("Test query (no filter):", JSON.stringify(testResult));
 
     // Query suplentes (has nome column directly)
     const supResult = await supabase
