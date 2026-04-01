@@ -1,4 +1,4 @@
-// v7 - criar, atualizar, deletar usuario
+// v8 - criar, atualizar, deletar usuario
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -69,12 +69,60 @@ Deno.serve(async (req) => {
         { password: senha }
       );
       if (updateError) {
-        console.error('Password update error:', updateError);
         return json({ error: 'Erro ao atualizar senha: ' + updateError.message }, 500);
       }
       await supabaseAdmin.from('user_roles').delete().eq('user_id', existing.user_id);
       await supabaseAdmin.from('user_roles').insert({ user_id: existing.user_id, role });
       return json({ success: true, message: 'Senha e perfil atualizados' });
+    }
+
+    // Helper: find auth user by email and link
+    async function findAndLinkAuthUser(): Promise<Response | null> {
+      // Use the Supabase Auth Admin API to get user by email
+      // We need to query the auth.users via SQL since listUsers has issues
+      const { data: authUsers, error: queryErr } = await supabaseAdmin
+        .rpc('find_auth_user_by_email', { _email: email });
+      
+      // Fallback: try direct REST
+      const res = await fetch(`${supabaseUrl}/auth/v1/admin/users`, {
+        headers: {
+          'Authorization': `Bearer ${serviceRoleKey}`,
+          'apikey': serviceRoleKey,
+        },
+      });
+
+      if (!res.ok) {
+        console.error('Admin users endpoint failed:', res.status);
+        return null;
+      }
+
+      const data = await res.json();
+      const users = data.users || [];
+      console.log(`Found ${users.length} auth users total`);
+      
+      const found = users.find((u: any) => u.email === email);
+      if (!found) {
+        console.log(`No auth user found with email: ${email}`);
+        return null;
+      }
+
+      console.log(`Found auth user ${found.id} for email ${email}`);
+
+      // Update password
+      await supabaseAdmin.auth.admin.updateUserById(found.id, { password: senha });
+
+      // Insert into usuarios
+      await supabaseAdmin.from('usuarios').insert({
+        user_id: found.id,
+        nome_usuario: nome,
+        email,
+      });
+
+      // Set role
+      await supabaseAdmin.from('user_roles').delete().eq('user_id', found.id);
+      await supabaseAdmin.from('user_roles').insert({ user_id: found.id, role });
+
+      return json({ success: true, message: `Usuário "${nome}" criado com sucesso` });
     }
 
     // Try to create new auth user
@@ -87,46 +135,9 @@ Deno.serve(async (req) => {
     if (authError) {
       console.error('Auth create failed:', authError.message);
 
-      // If email exists in auth, find the user via REST API directly
-      const getUserByEmailUrl = `${supabaseUrl}/auth/v1/admin/users?page=1&per_page=50`;
-      const res = await fetch(getUserByEmailUrl, {
-        headers: {
-          'Authorization': `Bearer ${serviceRoleKey}`,
-          'apikey': serviceRoleKey,
-        },
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        const users = data.users || data;
-        const found = Array.isArray(users)
-          ? users.find((u: any) => u.email === email)
-          : null;
-
-        if (found) {
-          // Update password
-          await supabaseAdmin.auth.admin.updateUserById(found.id, { password: senha });
-
-          // Insert into usuarios
-          const { error: insErr } = await supabaseAdmin.from('usuarios').insert({
-            user_id: found.id,
-            nome_usuario: nome,
-            email,
-          });
-          if (insErr) {
-            await supabaseAdmin.from('usuarios')
-              .update({ nome_usuario: nome, email })
-              .eq('user_id', found.id);
-          }
-
-          await supabaseAdmin.from('user_roles').delete().eq('user_id', found.id);
-          await supabaseAdmin.from('user_roles').insert({ user_id: found.id, role });
-
-          return json({ success: true, message: `Usuário "${nome}" criado com sucesso` });
-        }
-      } else {
-        console.error('REST list users failed:', res.status, await res.text());
-      }
+      // Try to recover by finding existing auth user
+      const recovered = await findAndLinkAuthUser();
+      if (recovered) return recovered;
 
       return json({ error: 'Erro ao criar usuário: ' + authError.message }, 500);
     }
@@ -139,15 +150,11 @@ Deno.serve(async (req) => {
     });
 
     if (userError) {
-      console.error('Usuarios insert error:', userError);
       await supabaseAdmin.auth.admin.deleteUser(authUser.user.id);
       return json({ error: 'Erro ao criar registro de usuário: ' + userError.message }, 500);
     }
 
-    const { error: roleError } = await supabaseAdmin
-      .from('user_roles')
-      .insert({ user_id: authUser.user.id, role });
-    if (roleError) console.error('Role insert error:', roleError);
+    await supabaseAdmin.from('user_roles').insert({ user_id: authUser.user.id, role });
 
     return json({ success: true, message: `Usuário "${nome}" criado com sucesso` });
   } catch (error) {
