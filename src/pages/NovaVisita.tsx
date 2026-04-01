@@ -443,7 +443,10 @@ export default function NovaVisita() {
             <div className="space-y-4">
               <InputField label="Data e hora" value={visita.data_hora} onChange={(v) => setVisita({ ...visita, data_hora: v })} type="datetime-local" />
               <InputField label="Assunto *" value={visita.assunto} onChange={(v) => setVisita({ ...visita, assunto: v })} placeholder="Descreva o motivo da visita" />
-              <InputField label="Quem indicou" value={visita.quem_indicou} onChange={(v) => setVisita({ ...visita, quem_indicou: v })} placeholder="Nome" />
+              <QuemIndicouSelector
+                value={visita.quem_indicou}
+                onChange={(nome, tipo, id) => setVisita({ ...visita, quem_indicou: nome, indicador_tipo: tipo, indicador_id: id })}
+              />
             </div>
           </div>
 
