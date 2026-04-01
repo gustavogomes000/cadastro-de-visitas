@@ -291,15 +291,31 @@ export default function NovaVisita() {
         pid = novaPessoa.id;
       }
 
-      const { error: visitaError } = await supabase.from("visitas").insert({
+      const visitaPayload: Record<string, any> = {
         pessoa_id: pid,
         data_hora: visita.data_hora ? new Date(visita.data_hora).toISOString() : new Date().toISOString(),
         assunto: visita.assunto, descricao_assunto: visita.descricao_assunto || null,
         quem_indicou: visita.quem_indicou || null, origem_visita: visita.origem_visita || null,
         status: visita.status, responsavel_tratativa: visita.responsavel_tratativa || null,
         observacoes: visita.observacoes || null, cadastrado_por: nomeUsuario || "",
-      });
-      if (visitaError) throw visitaError;
+      };
+      // Add indicador fields only if columns exist (silently ignore if they don't)
+      if (visita.indicador_tipo && visita.indicador_id) {
+        visitaPayload.indicador_tipo = visita.indicador_tipo;
+        visitaPayload.indicador_id = visita.indicador_id;
+      }
+      const { error: visitaError } = await supabase.from("visitas").insert(visitaPayload);
+      if (visitaError) {
+        // If error is about unknown columns, retry without them
+        if (visitaError.message?.includes("indicador_tipo") || visitaError.message?.includes("indicador_id")) {
+          delete visitaPayload.indicador_tipo;
+          delete visitaPayload.indicador_id;
+          const { error: retryError } = await supabase.from("visitas").insert(visitaPayload);
+          if (retryError) throw retryError;
+        } else {
+          throw visitaError;
+        }
+      }
 
       toast({ title: "✅ Visita registrada!" });
       clearSearch();
