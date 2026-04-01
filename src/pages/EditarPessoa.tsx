@@ -171,6 +171,9 @@ export default function EditarPessoa() {
               <input type="text" value={secaoEleitoral} onChange={(e) => setSecaoEleitoral(e.target.value.replace(/\D/g, ""))} placeholder="Ex: 123" className={inputClass} />
             </Field>
           </div>
+          <Field label="Colégio eleitoral">
+            <input type="text" value={colegioEleitoral} onChange={(e) => setColegioEleitoral(e.target.value)} placeholder="Nome do colégio eleitoral" className={inputClass} />
+          </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Município">
               <input type="text" value={municipio} onChange={(e) => setMunicipio(e.target.value)} placeholder="Cidade" className={inputClass} />
