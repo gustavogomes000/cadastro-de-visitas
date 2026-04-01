@@ -412,7 +412,6 @@ export default function NovaVisita() {
 
   const selecionarIndicador = (item: IndicadorResumo, tipo: IndicadorTipo) => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    indicadorAbortRef.current?.abort();
     setIndicadorBuscando(false);
     setIndicadorSelecionado({ id: item.id, nome: item.nome, tipo });
     setIndicadorBusca(item.nome);
@@ -422,14 +421,12 @@ export default function NovaVisita() {
 
   const limparIndicador = () => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    indicadorAbortRef.current?.abort();
     setIndicadorBuscando(false);
     setIndicadorSelecionado(null);
     setIndicadorBusca("");
     setVisita(prev => ({ ...prev, quem_indicou: "", indicador_tipo: null, indicador_id: null }));
     setIndicadorResultados(createEmptyIndicadorResultados());
     setIndicadorDropdownAberto(false);
-    indicadorUltimoTermoRef.current = "";
   };
 
   const handleSave = async () => {
