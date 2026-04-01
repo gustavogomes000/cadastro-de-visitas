@@ -180,7 +180,7 @@ export default function ConfigPage() {
     }
     setDeletingUserId(null);
   };
-
+  const RoleIcon = ({ r }: { r: string }) => {
     if (r === "admin") return <Shield size={14} className="text-primary" />;
     return <Headset size={14} className="text-muted-foreground" />;
   };
