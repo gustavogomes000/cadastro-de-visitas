@@ -1,4 +1,4 @@
-// v2 - Cadastro de Visitas — criar, atualizar senha, deletar usuário
+// v10 - criar, atualizar, deletar usuario - generateLink workaround
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -23,43 +23,29 @@ Deno.serve(async (req) => {
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
 
     // ===== DELETE USER =====
     if (action === 'delete') {
       const { user_id } = body;
       if (!user_id) return json({ error: 'user_id é obrigatório' }, 400);
 
-      // Delete from user_roles
       await supabaseAdmin.from('user_roles').delete().eq('user_id', user_id);
-      // Delete from usuarios
       await supabaseAdmin.from('usuarios').delete().eq('user_id', user_id);
-      // Delete auth user
       const { error } = await supabaseAdmin.auth.admin.deleteUser(user_id);
-      if (error) {
-        console.error('Delete user error:', error);
-        return json({ error: 'Erro ao deletar usuário: ' + error.message }, 500);
-      }
-
+      if (error) return json({ error: 'Erro ao deletar usuário: ' + error.message }, 500);
       return json({ success: true, message: 'Usuário deletado com sucesso' });
     }
 
     // ===== CREATE / UPDATE USER =====
     const { nome, senha, tipo } = body;
 
-    if (!nome || !senha) {
-      return json({ error: 'Nome e senha são obrigatórios' }, 400);
-    }
+    if (!nome || !senha) return json({ error: 'Nome e senha são obrigatórios' }, 400);
+    if (senha.length < 6) return json({ error: 'Senha deve ter pelo menos 6 caracteres' }, 400);
 
-    if (senha.length < 6) {
-      return json({ error: 'Senha deve ter pelo menos 6 caracteres' }, 400);
-    }
-
-    // Normalize: remove special chars, spaces → dots
-    const nomeNorm = nome
-      .toLowerCase()
-      .replace(/\s+/g, '.')
-      .replace(/[^a-z0-9.]/g, '');
+    const nomeNorm = nome.toLowerCase().replace(/\s+/g, '.').replace(/[^a-z0-9.]/g, '');
     const email = `${nomeNorm}@sistema.local`;
     const role = tipo === 'admin' ? 'admin' : 'recepcao';
 
@@ -71,64 +57,62 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     if (existing) {
-      // Update password only
-      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
-        existing.user_id,
-        { password: senha }
-      );
-
-      if (updateError) {
-        console.error('Password update error:', updateError);
-        return json({ error: 'Erro ao atualizar senha: ' + updateError.message }, 500);
-      }
-
-      // Upsert role
-      await supabaseAdmin
-        .from('user_roles')
-        .delete()
-        .eq('user_id', existing.user_id);
-      await supabaseAdmin
-        .from('user_roles')
-        .insert({ user_id: existing.user_id, role });
-
+      await supabaseAdmin.auth.admin.updateUserById(existing.user_id, { password: senha });
+      await supabaseAdmin.from('user_roles').delete().eq('user_id', existing.user_id);
+      await supabaseAdmin.from('user_roles').insert({ user_id: existing.user_id, role });
       return json({ success: true, message: 'Senha e perfil atualizados' });
     }
 
-    // Create new auth user (email auto-confirmed so they can log in)
+    // Try to create new auth user
     const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password: senha,
       email_confirm: true,
     });
 
-    if (authError) {
-      console.error('Auth create error:', authError);
-      return json({ error: 'Erro ao criar usuário: ' + authError.message }, 500);
-    }
+    let authUserId: string;
 
-    // Insert into usuarios table
-    const { error: userError } = await supabaseAdmin
-      .from('usuarios')
-      .insert({
-        user_id: authUser.user.id,
-        nome_usuario: nome,
+    if (authError) {
+      console.error('Auth create failed:', authError.message);
+
+      // Use generateLink to discover existing user's ID
+      const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+        type: 'magiclink',
         email,
       });
 
+      if (linkError || !linkData?.user?.id) {
+        console.error('generateLink failed:', linkError?.message);
+        return json({ error: 'Erro ao criar usuário. Tente outro nome.' }, 500);
+      }
+
+      authUserId = linkData.user.id;
+      console.log('Found existing auth user via generateLink:', authUserId);
+
+      // Update password
+      await supabaseAdmin.auth.admin.updateUserById(authUserId, { password: senha });
+    } else {
+      authUserId = authUser.user.id;
+    }
+
+    // Insert into usuarios table
+    const { error: userError } = await supabaseAdmin.from('usuarios').insert({
+      user_id: authUserId,
+      nome_usuario: nome,
+      email,
+    });
+
     if (userError) {
       console.error('Usuarios insert error:', userError);
-      await supabaseAdmin.auth.admin.deleteUser(authUser.user.id);
-      return json({ error: 'Erro ao criar registro de usuário: ' + userError.message }, 500);
+      if (!authError) {
+        await supabaseAdmin.auth.admin.deleteUser(authUserId);
+      }
+      return json({ error: 'Erro ao criar registro: ' + userError.message }, 500);
     }
 
-    // Insert role into user_roles
-    const { error: roleError } = await supabaseAdmin
-      .from('user_roles')
-      .insert({ user_id: authUser.user.id, role });
-
-    if (roleError) {
-      console.error('Role insert error:', roleError);
-    }
+    // Set role
+    await supabaseAdmin.from('user_roles').delete().eq('user_id', authUserId);
+    await supabaseAdmin.from('user_roles').insert({ user_id: authUserId, role });
 
     return json({ success: true, message: `Usuário "${nome}" criado com sucesso` });
   } catch (error) {
