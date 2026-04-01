@@ -5,7 +5,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const EXTERNO_URL = "https://yvdfdmyusdhgtzfguxbj.supabase.co";
+const EXTERNO_URL = Deno.env.get("SUPABASE_URL") ?? "https://hzhxrkurljrogxtzxmmb.supabase.co";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
