@@ -134,9 +134,6 @@ export default function EditarPessoa() {
           <Field label="Telefone">
             <input type="text" value={telefone} onChange={(e) => setTelefone(maskPhone(e.target.value))} placeholder="(00) 00000-0000" className={inputClass} />
           </Field>
-          <Field label="E-mail">
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="email@exemplo.com" className={inputClass} />
-          </Field>
           <Field label="Rede social (Instagram ou Facebook)">
             <input type="text" value={instagram} onChange={(e) => setInstagram(e.target.value)} placeholder="@usuario ou link" className={inputClass} />
           </Field>
