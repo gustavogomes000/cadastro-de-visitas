@@ -1,4 +1,4 @@
-// v8 - criar, atualizar, deletar usuario
+// v9 - criar, atualizar, deletar usuario
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -35,22 +35,15 @@ Deno.serve(async (req) => {
       await supabaseAdmin.from('user_roles').delete().eq('user_id', user_id);
       await supabaseAdmin.from('usuarios').delete().eq('user_id', user_id);
       const { error } = await supabaseAdmin.auth.admin.deleteUser(user_id);
-      if (error) {
-        console.error('Delete user error:', error);
-        return json({ error: 'Erro ao deletar usuário: ' + error.message }, 500);
-      }
+      if (error) return json({ error: 'Erro ao deletar usuário: ' + error.message }, 500);
       return json({ success: true, message: 'Usuário deletado com sucesso' });
     }
 
     // ===== CREATE / UPDATE USER =====
     const { nome, senha, tipo } = body;
 
-    if (!nome || !senha) {
-      return json({ error: 'Nome e senha são obrigatórios' }, 400);
-    }
-    if (senha.length < 6) {
-      return json({ error: 'Senha deve ter pelo menos 6 caracteres' }, 400);
-    }
+    if (!nome || !senha) return json({ error: 'Nome e senha são obrigatórios' }, 400);
+    if (senha.length < 6) return json({ error: 'Senha deve ter pelo menos 6 caracteres' }, 400);
 
     const nomeNorm = nome.toLowerCase().replace(/\s+/g, '.').replace(/[^a-z0-9.]/g, '');
     const email = `${nomeNorm}@sistema.local`;
@@ -64,65 +57,39 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     if (existing) {
-      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
-        existing.user_id,
-        { password: senha }
-      );
-      if (updateError) {
-        return json({ error: 'Erro ao atualizar senha: ' + updateError.message }, 500);
-      }
+      await supabaseAdmin.auth.admin.updateUserById(existing.user_id, { password: senha });
       await supabaseAdmin.from('user_roles').delete().eq('user_id', existing.user_id);
       await supabaseAdmin.from('user_roles').insert({ user_id: existing.user_id, role });
       return json({ success: true, message: 'Senha e perfil atualizados' });
     }
 
-    // Helper: find auth user by email and link
-    async function findAndLinkAuthUser(): Promise<Response | null> {
-      // Use the Supabase Auth Admin API to get user by email
-      // We need to query the auth.users via SQL since listUsers has issues
-      const { data: authUsers, error: queryErr } = await supabaseAdmin
-        .rpc('find_auth_user_by_email', { _email: email });
-      
-      // Fallback: try direct REST
-      const res = await fetch(`${supabaseUrl}/auth/v1/admin/users`, {
-        headers: {
-          'Authorization': `Bearer ${serviceRoleKey}`,
-          'apikey': serviceRoleKey,
-        },
-      });
-
-      if (!res.ok) {
-        console.error('Admin users endpoint failed:', res.status);
-        return null;
+    // Try to find existing auth user by email using GoTrue admin REST API
+    async function findAuthUserByEmail(targetEmail: string): Promise<string | null> {
+      // Paginate through all users to find the one with matching email
+      let page = 1;
+      const perPage = 100;
+      while (true) {
+        const res = await fetch(
+          `${supabaseUrl}/auth/v1/admin/users?page=${page}&per_page=${perPage}`,
+          {
+            headers: {
+              'Authorization': `Bearer ${serviceRoleKey}`,
+              'apikey': serviceRoleKey,
+            },
+          }
+        );
+        if (!res.ok) {
+          console.error('Admin users API error:', res.status, await res.text());
+          return null;
+        }
+        const data = await res.json();
+        const users = data.users || [];
+        const found = users.find((u: any) => u.email === targetEmail);
+        if (found) return found.id;
+        if (users.length < perPage) break;
+        page++;
       }
-
-      const data = await res.json();
-      const users = data.users || [];
-      console.log(`Found ${users.length} auth users total`);
-      
-      const found = users.find((u: any) => u.email === email);
-      if (!found) {
-        console.log(`No auth user found with email: ${email}`);
-        return null;
-      }
-
-      console.log(`Found auth user ${found.id} for email ${email}`);
-
-      // Update password
-      await supabaseAdmin.auth.admin.updateUserById(found.id, { password: senha });
-
-      // Insert into usuarios
-      await supabaseAdmin.from('usuarios').insert({
-        user_id: found.id,
-        nome_usuario: nome,
-        email,
-      });
-
-      // Set role
-      await supabaseAdmin.from('user_roles').delete().eq('user_id', found.id);
-      await supabaseAdmin.from('user_roles').insert({ user_id: found.id, role });
-
-      return json({ success: true, message: `Usuário "${nome}" criado com sucesso` });
+      return null;
     }
 
     // Try to create new auth user
@@ -132,29 +99,43 @@ Deno.serve(async (req) => {
       email_confirm: true,
     });
 
+    let authUserId: string;
+
     if (authError) {
       console.error('Auth create failed:', authError.message);
 
-      // Try to recover by finding existing auth user
-      const recovered = await findAndLinkAuthUser();
-      if (recovered) return recovered;
+      // Try to find and reuse existing auth user
+      const existingId = await findAuthUserByEmail(email);
+      if (!existingId) {
+        return json({ error: 'Erro ao criar usuário. Email conflitante: ' + email }, 500);
+      }
 
-      return json({ error: 'Erro ao criar usuário: ' + authError.message }, 500);
+      // Update the existing auth user's password
+      await supabaseAdmin.auth.admin.updateUserById(existingId, { password: senha });
+      authUserId = existingId;
+    } else {
+      authUserId = authUser.user.id;
     }
 
-    // New user created successfully
+    // Insert into usuarios table
     const { error: userError } = await supabaseAdmin.from('usuarios').insert({
-      user_id: authUser.user.id,
+      user_id: authUserId,
       nome_usuario: nome,
       email,
     });
 
     if (userError) {
-      await supabaseAdmin.auth.admin.deleteUser(authUser.user.id);
-      return json({ error: 'Erro ao criar registro de usuário: ' + userError.message }, 500);
+      console.error('Usuarios insert error:', userError);
+      // If we created a new user but insert failed, clean up
+      if (!authError) {
+        await supabaseAdmin.auth.admin.deleteUser(authUserId);
+      }
+      return json({ error: 'Erro ao criar registro: ' + userError.message }, 500);
     }
 
-    await supabaseAdmin.from('user_roles').insert({ user_id: authUser.user.id, role });
+    // Insert role
+    await supabaseAdmin.from('user_roles').delete().eq('user_id', authUserId);
+    await supabaseAdmin.from('user_roles').insert({ user_id: authUserId, role });
 
     return json({ success: true, message: `Usuário "${nome}" criado com sucesso` });
   } catch (error) {
