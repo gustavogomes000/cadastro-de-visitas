@@ -5,21 +5,14 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const EXTERNO_URL = "https://yvdfdmyusdhgtzfguxbj.supabase.co";
-
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
   try {
-    const EXTERNO_KEY = Deno.env.get("EXTERNO_SUPABASE_SERVICE_ROLE_KEY");
-    if (!EXTERNO_KEY) {
-      return new Response(JSON.stringify({ error: "Chave do Supabase externo não configurada" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    const EXTERNO_URL = Deno.env.get("SUPABASE_URL")!;
+    const EXTERNO_KEY = Deno.env.get("EXTERNO_SUPABASE_SERVICE_ROLE_KEY") ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
     const { termo } = await req.json();
     if (!termo || termo.trim().length < 2) {
