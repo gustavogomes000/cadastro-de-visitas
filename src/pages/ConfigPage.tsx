@@ -410,6 +410,20 @@ export default function ConfigPage() {
                             </div>
                           </div>
                         )}
+
+                        {/* Delete user */}
+                        {!isSelf && (
+                          <button
+                            onClick={() => handleDeleteUser(u.auth_user_id, u.nome)}
+                            disabled={deletingUserId === u.auth_user_id}
+                            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-destructive/10 hover:bg-destructive/20 text-destructive text-sm transition-colors disabled:opacity-50"
+                          >
+                            {deletingUserId === u.auth_user_id
+                              ? <Loader2 size={13} className="animate-spin" />
+                              : <Trash2 size={13} />}
+                            <span>Excluir usuário</span>
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
