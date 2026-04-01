@@ -58,7 +58,7 @@ export default function EditarPessoa() {
           setZonaEleitoral(data.zona_eleitoral || "");
           setSecaoEleitoral(data.secao_eleitoral || "");
           setMunicipio(data.municipio || "");
-          setUf(data.uf || "");
+          setUf(data.uf || "GO");
           setSituacaoTitulo(data.situacao_titulo || "");
           setObservacoesGerais(data.observacoes_gerais || "");
         }
