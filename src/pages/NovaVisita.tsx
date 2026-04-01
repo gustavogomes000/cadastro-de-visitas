@@ -52,6 +52,56 @@ interface DadosVisita {
   tipo_visitante: "" | "lideranca" | "fiscal" | "eleitor";
 }
 
+type IndicadorTipo = "suplente" | "lideranca";
+
+interface IndicadorResumo {
+  id: string;
+  nome: string;
+  numero_urna?: string | null;
+  partido?: string | null;
+  regiao?: string | null;
+}
+
+interface IndicadorResultados {
+  suplentes: IndicadorResumo[];
+  liderancas: IndicadorResumo[];
+}
+
+const createEmptyIndicadorResultados = (): IndicadorResultados => ({ suplentes: [], liderancas: [] });
+
+const INDICADOR_DEBOUNCE_MS = 180;
+const EXTERNAL_FUNCTIONS_URL = "https://yvdfdmyusdhgtzfguxbj.supabase.co/functions/v1";
+const EXTERNAL_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl2ZGZkbXl1c2RoZ3R6Zmd1eGJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0OTg4MzksImV4cCI6MjA4OTA3NDgzOX0.-xSNbj5kLibkhJoXmOXjfmYPKBB-gqasQgy322Kk-n4";
+const EXTERNAL_FUNCTIONS_HEADERS = {
+  "Content-Type": "application/json",
+  apikey: EXTERNAL_SUPABASE_ANON_KEY,
+  Authorization: `Bearer ${EXTERNAL_SUPABASE_ANON_KEY}`,
+};
+
+function normalizeIndicadorResultados(data: unknown): IndicadorResultados {
+  const payload = data as Partial<IndicadorResultados> | null;
+
+  return {
+    suplentes: Array.isArray(payload?.suplentes) ? payload.suplentes : [],
+    liderancas: Array.isArray(payload?.liderancas) ? payload.liderancas : [],
+  };
+}
+
+function hasIndicadorResultados(resultados: IndicadorResultados) {
+  return resultados.suplentes.length > 0 || resultados.liderancas.length > 0;
+}
+
+function filtrarIndicadoresPorTermo(resultados: IndicadorResultados, termo: string): IndicadorResultados {
+  const termoNormalizado = termo.toLowerCase();
+  const filtrar = (itens: IndicadorResumo[]) =>
+    itens.filter((item) => item.nome?.toLowerCase().includes(termoNormalizado));
+
+  return {
+    suplentes: filtrar(resultados.suplentes),
+    liderancas: filtrar(resultados.liderancas),
+  };
+}
+
 const InputField = ({ label, value, onChange, placeholder, type = "text", readonly = false }: {
   label: string; value: string; onChange: (v: string) => void; placeholder?: string; type?: string; readonly?: boolean;
 }) => (
@@ -109,12 +159,15 @@ export default function NovaVisita() {
 
   // Indicador states
   const [indicadorBusca, setIndicadorBusca] = useState("");
-  const [indicadorSelecionado, setIndicadorSelecionado] = useState<{ id: string; nome: string; tipo: "suplente" | "lideranca" } | null>(null);
-  const [indicadorResultados, setIndicadorResultados] = useState<{ suplentes: any[]; liderancas: any[] }>({ suplentes: [], liderancas: [] });
+  const [indicadorSelecionado, setIndicadorSelecionado] = useState<{ id: string; nome: string; tipo: IndicadorTipo } | null>(null);
+  const [indicadorResultados, setIndicadorResultados] = useState<IndicadorResultados>(createEmptyIndicadorResultados);
   const [indicadorBuscando, setIndicadorBuscando] = useState(false);
   const [indicadorDropdownAberto, setIndicadorDropdownAberto] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const indicadorContainerRef = useRef<HTMLDivElement>(null);
+  const indicadorAbortRef = useRef<AbortController | null>(null);
+  const indicadorCacheRef = useRef<Map<string, IndicadorResultados>>(new Map());
+  const indicadorUltimoTermoRef = useRef("");
 
   const formMode = pessoaStatus === "found" ? "visit_only" : "full";
 
@@ -137,6 +190,13 @@ export default function NovaVisita() {
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      indicadorAbortRef.current?.abort();
+    };
   }, []);
 
   useEffect(() => {
@@ -255,6 +315,8 @@ export default function NovaVisita() {
   };
 
   const clearSearch = () => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    indicadorAbortRef.current?.abort();
     setSearchInput("");
     setLocked(false);
     setPessoaStatus("idle");
@@ -264,7 +326,10 @@ export default function NovaVisita() {
     setVisitHistory([]);
     setIndicadorBusca("");
     setIndicadorSelecionado(null);
-    setIndicadorResultados({ suplentes: [], liderancas: [] });
+    setIndicadorResultados(createEmptyIndicadorResultados());
+    setIndicadorBuscando(false);
+    setIndicadorDropdownAberto(false);
+    indicadorUltimoTermoRef.current = "";
     setVisita({
       data_hora: getBrasiliaDateTime(),
       assunto: "", descricao_assunto: "", quem_indicou: "",
@@ -277,44 +342,87 @@ export default function NovaVisita() {
 
   // ── Indicador search via Edge Function ──
   const handleIndicadorInput = (valor: string) => {
+    const termo = valor.trim();
+    const termoNormalizado = termo.toLowerCase();
+
     setIndicadorBusca(valor);
     setIndicadorSelecionado(null);
     setVisita(prev => ({ ...prev, quem_indicou: valor, indicador_tipo: null, indicador_id: null }));
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (valor.trim().length < 2) {
-      setIndicadorResultados({ suplentes: [], liderancas: [] });
+    indicadorAbortRef.current?.abort();
+    indicadorUltimoTermoRef.current = termoNormalizado;
+
+    if (termo.length < 2) {
+      setIndicadorBuscando(false);
+      setIndicadorResultados(createEmptyIndicadorResultados());
       setIndicadorDropdownAberto(false);
       return;
     }
+
+    const cacheExato = indicadorCacheRef.current.get(termoNormalizado);
+    if (cacheExato) {
+      setIndicadorBuscando(false);
+      setIndicadorResultados(cacheExato);
+      setIndicadorDropdownAberto(hasIndicadorResultados(cacheExato));
+      return;
+    }
+
+    const cacheParcial = Array.from(indicadorCacheRef.current.entries())
+      .sort((a, b) => b[0].length - a[0].length)
+      .find(([cacheTermo]) => termoNormalizado.startsWith(cacheTermo));
+
+    if (cacheParcial) {
+      const resultadosFiltrados = filtrarIndicadoresPorTermo(cacheParcial[1], termoNormalizado);
+      setIndicadorResultados(resultadosFiltrados);
+      setIndicadorDropdownAberto(hasIndicadorResultados(resultadosFiltrados));
+    } else {
+      setIndicadorResultados(createEmptyIndicadorResultados());
+      setIndicadorDropdownAberto(false);
+    }
+
+    setIndicadorBuscando(true);
+
     debounceRef.current = setTimeout(async () => {
-      setIndicadorBuscando(true);
+      const controller = new AbortController();
+      indicadorAbortRef.current = controller;
+
       try {
-        const resp = await fetch("https://yvdfdmyusdhgtzfguxbj.supabase.co/functions/v1/buscar-indicadores", {
+        const resp = await fetch(`${EXTERNAL_FUNCTIONS_URL}/buscar-indicadores`, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "apikey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl2ZGZkbXl1c2RoZ3R6Zmd1eGJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0OTg4MzksImV4cCI6MjA4OTA3NDgzOX0.-xSNbj5kLibkhJoXmOXjfmYPKBB-gqasQgy322Kk-n4",
-            "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl2ZGZkbXl1c2RoZ3R6Zmd1eGJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0OTg4MzksImV4cCI6MjA4OTA3NDgzOX0.-xSNbj5kLibkhJoXmOXjfmYPKBB-gqasQgy322Kk-n4",
-          },
-          body: JSON.stringify({ termo: valor.trim() }),
+          headers: EXTERNAL_FUNCTIONS_HEADERS,
+          body: JSON.stringify({ termo }),
+          signal: controller.signal,
         });
-        const data = await resp.json();
-        if (data) {
-          setIndicadorResultados({
-            suplentes: data.suplentes || [],
-            liderancas: data.liderancas || [],
-          });
-          setIndicadorDropdownAberto(true);
+
+        if (!resp.ok) {
+          throw new Error(`Falha ao buscar indicadores (${resp.status})`);
         }
+
+        const data = normalizeIndicadorResultados(await resp.json());
+        indicadorCacheRef.current.set(termoNormalizado, data);
+
+        if (indicadorUltimoTermoRef.current !== termoNormalizado) return;
+
+        setIndicadorResultados(data);
+        setIndicadorDropdownAberto(hasIndicadorResultados(data));
       } catch (e) {
+        if (e instanceof Error && e.name === "AbortError") return;
         console.error("Erro ao buscar indicadores:", e);
+        if (indicadorUltimoTermoRef.current === termoNormalizado) {
+          setIndicadorDropdownAberto(false);
+        }
       } finally {
-        setIndicadorBuscando(false);
+        if (indicadorUltimoTermoRef.current === termoNormalizado) {
+          setIndicadorBuscando(false);
+        }
       }
-    }, 300);
+    }, INDICADOR_DEBOUNCE_MS);
   };
 
-  const selecionarIndicador = (item: any, tipo: "suplente" | "lideranca") => {
+  const selecionarIndicador = (item: IndicadorResumo, tipo: IndicadorTipo) => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    indicadorAbortRef.current?.abort();
+    setIndicadorBuscando(false);
     setIndicadorSelecionado({ id: item.id, nome: item.nome, tipo });
     setIndicadorBusca(item.nome);
     setIndicadorDropdownAberto(false);
@@ -322,10 +430,15 @@ export default function NovaVisita() {
   };
 
   const limparIndicador = () => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    indicadorAbortRef.current?.abort();
+    setIndicadorBuscando(false);
     setIndicadorSelecionado(null);
     setIndicadorBusca("");
     setVisita(prev => ({ ...prev, quem_indicou: "", indicador_tipo: null, indicador_id: null }));
-    setIndicadorResultados({ suplentes: [], liderancas: [] });
+    setIndicadorResultados(createEmptyIndicadorResultados());
+    setIndicadorDropdownAberto(false);
+    indicadorUltimoTermoRef.current = "";
   };
 
   const handleSave = async () => {
@@ -394,13 +507,9 @@ export default function NovaVisita() {
 
       // Sincronização fire-and-forget com sistema principal
       if (visita.tipo_visitante && visita.indicador_tipo && visita.indicador_id) {
-        fetch("https://yvdfdmyusdhgtzfguxbj.supabase.co/functions/v1/sincronizar-visitante", {
+        fetch(`${EXTERNAL_FUNCTIONS_URL}/sincronizar-visitante`, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "apikey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl2ZGZkbXl1c2RoZ3R6Zmd1eGJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0OTg4MzksImV4cCI6MjA4OTA3NDgzOX0.-xSNbj5kLibkhJoXmOXjfmYPKBB-gqasQgy322Kk-n4",
-            "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl2ZGZkbXl1c2RoZ3R6Zmd1eGJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0OTg4MzksImV4cCI6MjA4OTA3NDgzOX0.-xSNbj5kLibkhJoXmOXjfmYPKBB-gqasQgy322Kk-n4",
-          },
+          headers: EXTERNAL_FUNCTIONS_HEADERS,
           body: JSON.stringify({
             tipo: visita.tipo_visitante,
             nome: pessoa.nome,
@@ -597,7 +706,7 @@ export default function NovaVisita() {
                         <div className="text-[10px] uppercase tracking-wide text-muted-foreground px-3 py-1.5 font-semibold border-b border-border/50 sticky top-0 bg-card">
                           Suplentes
                         </div>
-                        {indicadorResultados.suplentes.map((s: any) => (
+                        {indicadorResultados.suplentes.map((s) => (
                           <button key={s.id} type="button" onClick={() => selecionarIndicador(s, "suplente")}
                             className="w-full text-left px-3 py-2.5 hover:bg-muted flex items-center justify-between transition-colors cursor-pointer">
                             <div>
@@ -620,7 +729,7 @@ export default function NovaVisita() {
                         <div className="text-[10px] uppercase tracking-wide text-muted-foreground px-3 py-1.5 font-semibold border-b border-border/50 sticky top-0 bg-card">
                           Lideranças
                         </div>
-                        {indicadorResultados.liderancas.map((l: any) => (
+                        {indicadorResultados.liderancas.map((l) => (
                           <button key={l.id} type="button" onClick={() => selecionarIndicador(l, "lideranca")}
                             className="w-full text-left px-3 py-2.5 hover:bg-muted flex items-center justify-between transition-colors cursor-pointer">
                             <div>
