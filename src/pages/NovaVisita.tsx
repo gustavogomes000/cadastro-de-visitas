@@ -113,6 +113,7 @@ export default function NovaVisita() {
   const [visita, setVisita] = useState<DadosVisita>({
     data_hora: getBrasiliaDateTime(),
     assunto: "", descricao_assunto: "", quem_indicou: "",
+    indicador_tipo: null, indicador_id: null,
     origem_visita: "", status: "Aguardando",
     responsavel_tratativa: "", observacoes: "",
   });
