@@ -32,6 +32,7 @@ interface DadosPessoa {
   titulo_eleitor: string;
   zona_eleitoral: string;
   secao_eleitoral: string;
+  colegio_eleitoral: string;
   municipio: string;
   uf: string;
   situacao_titulo: string;
@@ -168,8 +169,8 @@ const SelectField = ({ label, value, onChange, options, placeholder }: {
 const EMPTY_PESSOA: DadosPessoa = {
   cpf: "", nome: "", data_nascimento: "", telefone: "", email: "",
   whatsapp: "", instagram: "", outras_redes: "",
-  titulo_eleitor: "", zona_eleitoral: "", secao_eleitoral: "",
-  municipio: "", uf: "", situacao_titulo: "", observacoes_gerais: "",
+  titulo_eleitor: "", zona_eleitoral: "", secao_eleitoral: "", colegio_eleitoral: "",
+  municipio: "", uf: "GO", situacao_titulo: "", observacoes_gerais: "",
 };
 
 export default function NovaVisita() {
@@ -257,8 +258,8 @@ export default function NovaVisita() {
       telefone: data.telefone || "", email: data.email || "", whatsapp: data.whatsapp || "",
       instagram: data.instagram || "", outras_redes: data.outras_redes || "",
       titulo_eleitor: data.titulo_eleitor || "", zona_eleitoral: data.zona_eleitoral || "",
-      secao_eleitoral: data.secao_eleitoral || "", municipio: data.municipio || "",
-      uf: data.uf || "", situacao_titulo: data.situacao_titulo || "",
+      secao_eleitoral: data.secao_eleitoral || "", colegio_eleitoral: data.colegio_eleitoral || "",
+      municipio: data.municipio || "", uf: data.uf || "GO", situacao_titulo: data.situacao_titulo || "",
       observacoes_gerais: data.observacoes_gerais || "",
     });
   }
@@ -620,6 +621,7 @@ export default function NovaVisita() {
                   <InputField label="Zona eleitoral" value={pessoa.zona_eleitoral} onChange={(v) => setPessoa({ ...pessoa, zona_eleitoral: v.replace(/\D/g, "") })} placeholder="Ex: 42" />
                   <InputField label="Seção" value={pessoa.secao_eleitoral} onChange={(v) => setPessoa({ ...pessoa, secao_eleitoral: v.replace(/\D/g, "") })} placeholder="Ex: 123" />
                 </div>
+                <InputField label="Colégio eleitoral" value={pessoa.colegio_eleitoral} onChange={(v) => setPessoa({ ...pessoa, colegio_eleitoral: v })} placeholder="Nome do colégio eleitoral" />
                 <div className="grid grid-cols-2 gap-3">
                   <InputField label="Município" value={pessoa.municipio} onChange={(v) => setPessoa({ ...pessoa, municipio: v })} placeholder="Cidade" />
                   <SelectField label="UF" value={pessoa.uf} onChange={(v) => setPessoa({ ...pessoa, uf: v })} options={UF_OPTIONS} />
