@@ -1,4 +1,4 @@
-// v3 - Cadastro de Visitas — criar, atualizar senha, deletar usuário, email_exists fix
+// v4 - criar, atualizar senha, deletar usuário, email_exists recovery
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -30,11 +30,8 @@ Deno.serve(async (req) => {
       const { user_id } = body;
       if (!user_id) return json({ error: 'user_id é obrigatório' }, 400);
 
-      // Delete from user_roles
       await supabaseAdmin.from('user_roles').delete().eq('user_id', user_id);
-      // Delete from usuarios
       await supabaseAdmin.from('usuarios').delete().eq('user_id', user_id);
-      // Delete auth user
       const { error } = await supabaseAdmin.auth.admin.deleteUser(user_id);
       if (error) {
         console.error('Delete user error:', error);
@@ -55,7 +52,6 @@ Deno.serve(async (req) => {
       return json({ error: 'Senha deve ter pelo menos 6 caracteres' }, 400);
     }
 
-    // Normalize: remove special chars, spaces → dots
     const nomeNorm = nome
       .toLowerCase()
       .replace(/\s+/g, '.')
@@ -71,7 +67,6 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     if (existing) {
-      // Update password only
       const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
         existing.user_id,
         { password: senha }
@@ -82,47 +77,51 @@ Deno.serve(async (req) => {
         return json({ error: 'Erro ao atualizar senha: ' + updateError.message }, 500);
       }
 
-      // Upsert role
-      await supabaseAdmin
-        .from('user_roles')
-        .delete()
-        .eq('user_id', existing.user_id);
-      await supabaseAdmin
-        .from('user_roles')
-        .insert({ user_id: existing.user_id, role });
+      await supabaseAdmin.from('user_roles').delete().eq('user_id', existing.user_id);
+      await supabaseAdmin.from('user_roles').insert({ user_id: existing.user_id, role });
 
       return json({ success: true, message: 'Senha e perfil atualizados' });
     }
 
-    // Create new auth user (email auto-confirmed so they can log in)
+    // Try to create new auth user
     const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password: senha,
       email_confirm: true,
     });
 
+    // If email already exists in auth but not in usuarios table, recover
     if (authError) {
-      // If email already exists in auth, try to find and link the existing auth user
-      if (authError.message?.includes('already been registered')) {
-        // List users to find by email
-        const { data: listData } = await supabaseAdmin.auth.admin.listUsers();
-        const existingAuthUser = listData?.users?.find(u => u.email === email);
-        if (existingAuthUser) {
+      console.log('Create user error code:', (authError as any)?.code, 'msg:', authError.message);
+
+      const isEmailExists =
+        authError.message?.includes('already been registered') ||
+        (authError as any)?.code === 'email_exists';
+
+      if (isEmailExists) {
+        // Find the existing auth user by listing (filter by email)
+        const { data: listData } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
+        const found = listData?.users?.find((u: any) => u.email === email);
+
+        if (found) {
           // Update password
-          await supabaseAdmin.auth.admin.updateUserById(existingAuthUser.id, { password: senha });
-          // Insert into usuarios
-          await supabaseAdmin.from('usuarios').upsert({
-            user_id: existingAuthUser.id,
-            nome_usuario: nome,
-            email,
-          }, { onConflict: 'user_id' });
-          // Insert role
-          await supabaseAdmin.from('user_roles').delete().eq('user_id', existingAuthUser.id);
-          await supabaseAdmin.from('user_roles').insert({ user_id: existingAuthUser.id, role });
-          return json({ success: true, message: `Usuário "${nome}" vinculado e atualizado com sucesso` });
+          await supabaseAdmin.auth.admin.updateUserById(found.id, { password: senha });
+
+          // Upsert into usuarios
+          const { error: upsertErr } = await supabaseAdmin.from('usuarios').upsert(
+            { user_id: found.id, nome_usuario: nome, email },
+            { onConflict: 'user_id' }
+          );
+          if (upsertErr) console.error('Upsert usuarios error:', upsertErr);
+
+          // Set role
+          await supabaseAdmin.from('user_roles').delete().eq('user_id', found.id);
+          await supabaseAdmin.from('user_roles').insert({ user_id: found.id, role });
+
+          return json({ success: true, message: `Usuário "${nome}" vinculado com sucesso` });
         }
       }
-      console.error('Auth create error:', authError);
+
       return json({ error: 'Erro ao criar usuário: ' + authError.message }, 500);
     }
 
@@ -141,7 +140,7 @@ Deno.serve(async (req) => {
       return json({ error: 'Erro ao criar registro de usuário: ' + userError.message }, 500);
     }
 
-    // Insert role into user_roles
+    // Insert role
     const { error: roleError } = await supabaseAdmin
       .from('user_roles')
       .insert({ user_id: authUser.user.id, role });
