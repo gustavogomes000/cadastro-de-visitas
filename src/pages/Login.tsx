@@ -3,7 +3,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import candidataImg from "@/assets/candidata.jpg";
 import logoImg from "@/assets/Logo_Sarelli.png";
 
-const APP_TITLE = "Painel de Pagamentos";
+const APP_TITLE = "Cadastro de Visitas";
 
 /* ── Constellation / Network background ── */
 function ConstellationBg() {
