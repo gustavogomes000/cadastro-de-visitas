@@ -664,7 +664,7 @@ export default function NovaVisita() {
                     {v.data_hora ? new Date(v.data_hora).toLocaleDateString("pt-BR") : "–"}
                   </p>
                 </div>
-                <span className={cn("text-[10px] font-bold", localGetStatusColor(v.status))}>{v.status}</span>
+                <span className="text-[10px] font-bold text-muted-foreground">{v.assunto || ""}</span>
               </div>
             ))}
           </div>
