@@ -379,13 +379,12 @@ export default function NovaVisita() {
 
   const clearSearch = () => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    setCpfInput("");
-    setCpfChecked(false);
     setShowDuplicateDialog(false);
+    setDuplicatePessoa(null);
     setSearchInput("");
     setLocked(false);
     setPessoaStatus("idle");
-    setShowForm(false);
+    setShowForm(true);
     setExistingPessoaId(null);
     setPessoa({ ...EMPTY_PESSOA });
     setVisitHistory([]);
