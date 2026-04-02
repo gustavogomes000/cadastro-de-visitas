@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { AppLayout } from "@/components/AppLayout";
@@ -6,24 +6,18 @@ import { Search, ChevronRight, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDateTime } from "@/lib/masks";
 
-function getTagColor(tipo: string): string {
-  switch (tipo) {
-    case "suplente": return "bg-emerald-500/15 text-emerald-600 border-emerald-500/30";
-    case "lideranca":
-    case "lideranca_cadastrada": return "bg-blue-500/15 text-blue-600 border-blue-500/30";
-    case "coordenador": return "bg-purple-500/15 text-purple-600 border-purple-500/30";
-    default: return "bg-muted text-muted-foreground border-border";
-  }
-}
+const SUPABASE_PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID || "hzhxrkurljrogxtzxmmb";
+const OWN_FUNCTIONS_URL = `https://${SUPABASE_PROJECT_ID}.supabase.co/functions/v1`;
+const OWN_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-function getTagLabel(tipo: string): string {
-  switch (tipo) {
-    case "suplente": return "Suplente";
-    case "lideranca":
-    case "lideranca_cadastrada": return "Liderança";
-    case "coordenador": return "Coordenador";
-    default: return tipo || "–";
-  }
+interface UsuarioExterno {
+  id: string;
+  nome: string;
+  tipo: string;
+  tag: string;
+  subtitulo?: string;
+  municipio?: string;
+  fonte?: string;
 }
 
 interface VisitaComPessoa {
@@ -50,16 +44,50 @@ interface VisitaComPessoa {
   } | null;
 }
 
+type TabType = "todos" | "suplente" | "lideranca";
+
 export default function DashboardAdmin() {
   const navigate = useNavigate();
   const [visitas, setVisitas] = useState<VisitaComPessoa[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<TabType>("todos");
+
+  // External users for type matching
+  const [externos, setExternos] = useState<UsuarioExterno[]>([]);
+  const externosMapRef = useRef<Map<string, UsuarioExterno>>(new Map());
 
   useEffect(() => {
     fetchVisitas();
+    fetchExternos();
   }, []);
+
+  async function fetchExternos() {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token || OWN_ANON_KEY;
+      const r = await fetch(`${OWN_FUNCTIONS_URL}/listar-usuarios-externos`, {
+        headers: {
+          "Content-Type": "application/json",
+          apikey: OWN_ANON_KEY,
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (!r.ok) return;
+      const data = await r.json();
+      if (Array.isArray(data)) {
+        setExternos(data);
+        const map = new Map<string, UsuarioExterno>();
+        data.forEach((u: UsuarioExterno) => {
+          map.set((u.nome || "").toLowerCase().trim(), u);
+        });
+        externosMapRef.current = map;
+      }
+    } catch (err) {
+      console.error("[Dashboard] Erro ao buscar externos:", err);
+    }
+  }
 
   async function fetchVisitas() {
     setLoading(true);
@@ -72,7 +100,32 @@ export default function DashboardAdmin() {
     setLoading(false);
   }
 
+  function getIndicadorTipo(quemIndicou: string | null): string | null {
+    if (!quemIndicou) return null;
+    const ext = externosMapRef.current.get(quemIndicou.toLowerCase().trim());
+    return ext?.tipo || null;
+  }
+
+  function getTagInfo(tipo: string | null): { label: string; className: string } {
+    switch (tipo) {
+      case "suplente":
+        return { label: "Suplente", className: "bg-emerald-500/15 text-emerald-600 border-emerald-500/30" };
+      case "lideranca":
+      case "lideranca_cadastrada":
+        return { label: "Liderança", className: "bg-blue-500/15 text-blue-600 border-blue-500/30" };
+      default:
+        return { label: "", className: "" };
+    }
+  }
+
   const filtered = visitas.filter((v) => {
+    // Tab filter
+    if (activeTab !== "todos") {
+      const tipo = getIndicadorTipo(v.quem_indicou);
+      if (activeTab === "suplente" && tipo !== "suplente") return false;
+      if (activeTab === "lideranca" && tipo !== "lideranca" && tipo !== "lideranca_cadastrada") return false;
+    }
+    // Search filter
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
     return (
@@ -83,17 +136,9 @@ export default function DashboardAdmin() {
     );
   });
 
-  // Group by quem_indicou for summary
-  const indicadorMap = new Map<string, { tipo: string; count: number }>();
-  visitas.forEach((v) => {
-    if (v.quem_indicou) {
-      const key = v.quem_indicou;
-      if (!indicadorMap.has(key)) {
-        indicadorMap.set(key, { tipo: "suplente", count: 0 });
-      }
-      indicadorMap.get(key)!.count++;
-    }
-  });
+  // Counts per tab
+  const countSuplente = visitas.filter(v => getIndicadorTipo(v.quem_indicou) === "suplente").length;
+  const countLideranca = visitas.filter(v => { const t = getIndicadorTipo(v.quem_indicou); return t === "lideranca" || t === "lideranca_cadastrada"; }).length;
 
   const getStatusColor = (status: string | null) => {
     switch (status) {
@@ -104,14 +149,44 @@ export default function DashboardAdmin() {
     }
   };
 
+  const tabs: { key: TabType; label: string; count: number }[] = [
+    { key: "todos", label: "Todos", count: visitas.length },
+    { key: "suplente", label: "Suplentes", count: countSuplente },
+    { key: "lideranca", label: "Lideranças", count: countLideranca },
+  ];
+
   return (
     <AppLayout>
       <div className="flex items-center gap-3 mb-4">
         <Users size={22} className="text-primary" />
         <h2 className="text-xl font-bold">Dashboard</h2>
         <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-semibold ml-auto">
-          {visitas.length} cadastros
+          {filtered.length} cadastros
         </span>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-2 mb-4 overflow-x-auto">
+        {tabs.map(tab => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={cn(
+              "px-4 py-2 rounded-lg text-sm font-semibold transition-all whitespace-nowrap",
+              activeTab === tab.key
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "bg-card border border-border text-muted-foreground hover:bg-muted"
+            )}
+          >
+            {tab.label}
+            <span className={cn(
+              "ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full",
+              activeTab === tab.key ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-muted-foreground"
+            )}>
+              {tab.count}
+            </span>
+          </button>
+        ))}
       </div>
 
       {/* Search */}
@@ -126,28 +201,6 @@ export default function DashboardAdmin() {
         />
       </div>
 
-      {/* Summary cards */}
-      {!searchQuery && indicadorMap.size > 0 && (
-        <div className="mb-4">
-          <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-2">Por indicador</p>
-          <div className="flex gap-2 flex-wrap">
-            {Array.from(indicadorMap.entries())
-              .sort((a, b) => b[1].count - a[1].count)
-              .slice(0, 10)
-              .map(([nome, info]) => (
-                <button
-                  key={nome}
-                  onClick={() => setSearchQuery(nome)}
-                  className="text-xs px-3 py-1.5 rounded-lg border bg-card hover:bg-muted transition-colors flex items-center gap-1.5"
-                >
-                  <span className="font-semibold">{nome}</span>
-                  <span className="text-muted-foreground">({info.count})</span>
-                </button>
-              ))}
-          </div>
-        </div>
-      )}
-
       {/* Visits list */}
       {loading ? (
         <div className="space-y-3">
@@ -159,7 +212,7 @@ export default function DashboardAdmin() {
         <div className="text-center py-16 text-muted-foreground">
           <p className="text-lg mb-1">Nenhum cadastro encontrado</p>
           <p className="text-sm">
-            {searchQuery ? "Tente outro termo de busca." : "Ainda não há cadastros."}
+            {searchQuery ? "Tente outro termo de busca." : "Ainda não há cadastros nessa categoria."}
           </p>
         </div>
       ) : (
@@ -167,6 +220,8 @@ export default function DashboardAdmin() {
           {filtered.map((v, i) => {
             const isExpanded = expandedId === v.id;
             const p = v.pessoas;
+            const tipo = getIndicadorTipo(v.quem_indicou);
+            const tag = getTagInfo(tipo);
             return (
               <div
                 key={v.id}
@@ -182,8 +237,11 @@ export default function DashboardAdmin() {
                       <p className="font-semibold text-sm truncate">{p?.nome || "Sem nome"}</p>
                       <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                         {v.quem_indicou && (
-                          <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold border bg-emerald-500/15 text-emerald-600 border-emerald-500/30">
-                            {v.quem_indicou}
+                          <span className={cn(
+                            "text-[10px] px-2 py-0.5 rounded-full font-semibold border",
+                            tag.className || "bg-muted text-muted-foreground border-border"
+                          )}>
+                            {tag.label ? `${tag.label}: ` : ""}{v.quem_indicou}
                           </span>
                         )}
                         {v.status && (
@@ -205,7 +263,6 @@ export default function DashboardAdmin() {
                   </p>
                 </button>
 
-                {/* Expanded details */}
                 {isExpanded && p && (
                   <div className="mt-3 pt-3 border-t border-border/50 space-y-2 animate-fade-in">
                     <p className="text-xs font-bold text-primary uppercase tracking-wide">Dados do Cadastro</p>
