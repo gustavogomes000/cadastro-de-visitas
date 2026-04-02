@@ -44,8 +44,9 @@ interface DadosVisita {
   assunto: string;
   descricao_assunto: string;
   quem_indicou: string;
-  indicador_tipo: "suplente" | "lideranca" | null;
+  indicador_tipo: string | null;
   indicador_id: string | null;
+  indicador_nome: string | null;
   origem_visita: string;
   status: string;
   responsavel_tratativa: string;
@@ -53,49 +54,34 @@ interface DadosVisita {
   tipo_visitante: "" | "lideranca" | "fiscal" | "eleitor";
 }
 
-type IndicadorTipo = "suplente" | "lideranca";
-
-interface IndicadorResumo {
+interface UsuarioExterno {
   id: string;
   nome: string;
-  numero_urna?: string | null;
-  partido?: string | null;
-  regiao?: string | null;
+  tipo: string;
+  tag: string;
+  subtitulo?: string;
+  municipio?: string;
+  fonte?: string;
 }
 
-interface IndicadorResultados {
-  suplentes: IndicadorResumo[];
-  liderancas: IndicadorResumo[];
+function getTagColor(tipo: string): string {
+  switch (tipo) {
+    case "suplente": return "bg-emerald-500/15 text-emerald-600";
+    case "super_admin":
+    case "coordenador": return "bg-purple-500/15 text-purple-600";
+    case "lideranca":
+    case "lideranca_cadastrada": return "bg-blue-500/15 text-blue-600";
+    case "fiscal":
+    case "fiscal_cadastrado": return "bg-orange-500/15 text-orange-600";
+    case "eleitor_cadastrado": return "bg-gray-500/15 text-gray-500";
+    default: return "bg-muted text-muted-foreground";
+  }
 }
-
-const createEmptyIndicadorResultados = (): IndicadorResultados => ({ suplentes: [], liderancas: [] });
 
 // Cache global para evitar re-fetch entre renders
-let indicadorCacheGlobal: IndicadorResultados | null = null;
-let indicadorCachePromise: Promise<IndicadorResultados> | null = null;
+let usuariosCacheGlobal: UsuarioExterno[] | null = null;
+let usuariosCachePromise: Promise<UsuarioExterno[]> | null = null;
 
-async function fetchAllIndicadores(): Promise<IndicadorResultados> {
-  if (indicadorCacheGlobal) return indicadorCacheGlobal;
-  if (indicadorCachePromise) return indicadorCachePromise;
-
-  indicadorCachePromise = Promise.all([
-    fetch(`${EXTERNAL_FUNCTIONS_URL}/buscar-suplentes`, { method: "GET", headers: EXTERNAL_FUNCTIONS_HEADERS }).then(r => r.ok ? r.json() : []),
-    fetch(`${EXTERNAL_FUNCTIONS_URL}/buscar-liderancas-externo`, { method: "GET", headers: EXTERNAL_FUNCTIONS_HEADERS }).then(r => r.ok ? r.json() : []),
-  ]).then(([suplData, lidData]) => {
-    const result: IndicadorResultados = {
-      suplentes: (Array.isArray(suplData) ? suplData : []).map((s: any) => ({ id: s.id, nome: s.nome, numero_urna: s.numero_urna, partido: s.partido, regiao: s.regiao_atuacao })),
-      liderancas: (Array.isArray(lidData) ? lidData : []).map((l: any) => ({ id: l.id, nome: l.nome, regiao: l.regiao_atuacao })),
-    };
-    indicadorCacheGlobal = result;
-    indicadorCachePromise = null;
-    return result;
-  }).catch(() => {
-    indicadorCachePromise = null;
-    return createEmptyIndicadorResultados();
-  });
-
-  return indicadorCachePromise;
-}
 const SUPABASE_PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID || "hzhxrkurljrogxtzxmmb";
 const OWN_FUNCTIONS_URL = `https://${SUPABASE_PROJECT_ID}.supabase.co/functions/v1`;
 const EXTERNAL_FUNCTIONS_URL = "https://yvdfdmyusdhgtzfguxbj.supabase.co/functions/v1";
@@ -112,28 +98,27 @@ const OWN_FUNCTIONS_HEADERS = {
   Authorization: `Bearer ${OWN_ANON_KEY}`,
 };
 
-function normalizeIndicadorResultados(data: unknown): IndicadorResultados {
-  const payload = data as Partial<IndicadorResultados> | null;
+async function fetchAllUsuariosExternos(): Promise<UsuarioExterno[]> {
+  if (usuariosCacheGlobal) return usuariosCacheGlobal;
+  if (usuariosCachePromise) return usuariosCachePromise;
 
-  return {
-    suplentes: Array.isArray(payload?.suplentes) ? payload.suplentes : [],
-    liderancas: Array.isArray(payload?.liderancas) ? payload.liderancas : [],
-  };
-}
+  usuariosCachePromise = fetch(`${OWN_FUNCTIONS_URL}/listar-usuarios-externos`, {
+    method: "GET",
+    headers: OWN_FUNCTIONS_HEADERS,
+  })
+    .then(r => r.ok ? r.json() : [])
+    .then((data: unknown) => {
+      const result = Array.isArray(data) ? data as UsuarioExterno[] : [];
+      usuariosCacheGlobal = result;
+      usuariosCachePromise = null;
+      return result;
+    })
+    .catch(() => {
+      usuariosCachePromise = null;
+      return [] as UsuarioExterno[];
+    });
 
-function hasIndicadorResultados(resultados: IndicadorResultados) {
-  return resultados.suplentes.length > 0 || resultados.liderancas.length > 0;
-}
-
-function filtrarIndicadoresPorTermo(resultados: IndicadorResultados, termo: string): IndicadorResultados {
-  const termoNormalizado = termo.toLowerCase();
-  const filtrar = (itens: IndicadorResumo[]) =>
-    itens.filter((item) => item.nome?.toLowerCase().includes(termoNormalizado));
-
-  return {
-    suplentes: filtrar(resultados.suplentes),
-    liderancas: filtrar(resultados.liderancas),
-  };
+  return usuariosCachePromise;
 }
 
 const InputField = ({ label, value, onChange, placeholder, type = "text", readonly = false }: {
@@ -193,8 +178,8 @@ export default function NovaVisita() {
 
   // Indicador states
   const [indicadorBusca, setIndicadorBusca] = useState("");
-  const [indicadorSelecionado, setIndicadorSelecionado] = useState<{ id: string; nome: string; tipo: IndicadorTipo } | null>(null);
-  const [indicadorResultados, setIndicadorResultados] = useState<IndicadorResultados>(createEmptyIndicadorResultados);
+  const [indicadorSelecionado, setIndicadorSelecionado] = useState<UsuarioExterno | null>(null);
+  const [indicadorResultados, setIndicadorResultados] = useState<UsuarioExterno[]>([]);
   const [indicadorBuscando, setIndicadorBuscando] = useState(false);
   const [indicadorDropdownAberto, setIndicadorDropdownAberto] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -206,7 +191,7 @@ export default function NovaVisita() {
   const [visita, setVisita] = useState<DadosVisita>({
     data_hora: getBrasiliaDateTime(),
     assunto: "", descricao_assunto: "", quem_indicou: "",
-    indicador_tipo: null, indicador_id: null,
+    indicador_tipo: null, indicador_id: null, indicador_nome: null,
     origem_visita: "", status: "Aguardando",
     responsavel_tratativa: "", observacoes: "",
     tipo_visitante: "",
@@ -223,10 +208,10 @@ export default function NovaVisita() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  // Preload indicadores on mount
-  const allIndicadoresRef = useRef<IndicadorResultados>(createEmptyIndicadorResultados());
+  // Preload usuarios on mount
+  const allUsuariosRef = useRef<UsuarioExterno[]>([]);
   useEffect(() => {
-    fetchAllIndicadores().then(data => { allIndicadoresRef.current = data; });
+    fetchAllUsuariosExternos().then(data => { allUsuariosRef.current = data; });
   }, []);
 
   useEffect(() => {
@@ -361,63 +346,60 @@ export default function NovaVisita() {
     setVisitHistory([]);
     setIndicadorBusca("");
     setIndicadorSelecionado(null);
-    setIndicadorResultados(createEmptyIndicadorResultados());
+    setIndicadorResultados([]);
     setIndicadorBuscando(false);
     setIndicadorDropdownAberto(false);
     setVisita({
       data_hora: getBrasiliaDateTime(),
       assunto: "", descricao_assunto: "", quem_indicou: "",
-      indicador_tipo: null, indicador_id: null,
+      indicador_tipo: null, indicador_id: null, indicador_nome: null,
       origem_visita: "", status: "Aguardando",
       responsavel_tratativa: "", observacoes: "",
       tipo_visitante: "",
     });
   };
 
-  // ── Indicador search via Edge Function ──
+  // ── Indicador search ──
   const handleIndicadorInput = (valor: string) => {
-    const termo = valor.trim();
-    const termoNormalizado = termo.toLowerCase();
+    const termo = valor.trim().toLowerCase();
 
     setIndicadorBusca(valor);
     setIndicadorSelecionado(null);
-    setVisita(prev => ({ ...prev, quem_indicou: valor, indicador_tipo: null, indicador_id: null }));
+    setVisita(prev => ({ ...prev, quem_indicou: valor, indicador_tipo: null, indicador_id: null, indicador_nome: null }));
 
     if (termo.length < 2) {
       setIndicadorBuscando(false);
-      setIndicadorResultados(createEmptyIndicadorResultados());
+      setIndicadorResultados([]);
       setIndicadorDropdownAberto(false);
       return;
     }
 
-    // If cache is loaded, filter instantly
-    const all = allIndicadoresRef.current;
-    if (all.suplentes.length > 0 || all.liderancas.length > 0) {
-      const filtered = filtrarIndicadoresPorTermo(all, termoNormalizado);
+    const all = allUsuariosRef.current;
+    if (all.length > 0) {
+      const filtered = all.filter(u => u.nome?.toLowerCase().includes(termo));
       setIndicadorResultados(filtered);
-      setIndicadorDropdownAberto(hasIndicadorResultados(filtered));
+      setIndicadorDropdownAberto(filtered.length > 0);
       setIndicadorBuscando(false);
       return;
     }
 
-    // Cache not loaded yet — fetch and filter
     setIndicadorBuscando(true);
-    fetchAllIndicadores().then(data => {
-      allIndicadoresRef.current = data;
-      const filtered = filtrarIndicadoresPorTermo(data, termoNormalizado);
+    fetchAllUsuariosExternos().then(data => {
+      allUsuariosRef.current = data;
+      const filtered = data.filter(u => u.nome?.toLowerCase().includes(termo));
       setIndicadorResultados(filtered);
-      setIndicadorDropdownAberto(hasIndicadorResultados(filtered));
+      setIndicadorDropdownAberto(filtered.length > 0);
       setIndicadorBuscando(false);
     });
   };
 
-  const selecionarIndicador = (item: IndicadorResumo, tipo: IndicadorTipo) => {
+  const selecionarIndicador = (item: UsuarioExterno) => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     setIndicadorBuscando(false);
-    setIndicadorSelecionado({ id: item.id, nome: item.nome, tipo });
+    setIndicadorSelecionado(item);
     setIndicadorBusca(item.nome);
     setIndicadorDropdownAberto(false);
-    setVisita(prev => ({ ...prev, quem_indicou: item.nome, indicador_tipo: tipo, indicador_id: item.id }));
+    setVisita(prev => ({ ...prev, quem_indicou: item.nome, indicador_tipo: item.tipo, indicador_id: item.id, indicador_nome: item.nome }));
   };
 
   const limparIndicador = () => {
@@ -425,8 +407,8 @@ export default function NovaVisita() {
     setIndicadorBuscando(false);
     setIndicadorSelecionado(null);
     setIndicadorBusca("");
-    setVisita(prev => ({ ...prev, quem_indicou: "", indicador_tipo: null, indicador_id: null }));
-    setIndicadorResultados(createEmptyIndicadorResultados());
+    setVisita(prev => ({ ...prev, quem_indicou: "", indicador_tipo: null, indicador_id: null, indicador_nome: null }));
+    setIndicadorResultados([]);
     setIndicadorDropdownAberto(false);
   };
 
@@ -494,24 +476,34 @@ export default function NovaVisita() {
         }
       }
 
-      // Sincronização fire-and-forget com sistema principal
+      // Sincronização fire-and-forget com sistema principal via receber-cadastro-externo
       if (visita.tipo_visitante && visita.indicador_tipo && visita.indicador_id) {
-        fetch(`${EXTERNAL_FUNCTIONS_URL}/sincronizar-visitante`, {
+        const cadastroPayload: Record<string, any> = {
+          indicador_id: visita.indicador_id,
+          indicador_tipo: visita.indicador_tipo,
+          indicador_nome: visita.indicador_nome || visita.quem_indicou,
+          tipo: visita.tipo_visitante,
+          nome: pessoa.nome,
+          cpf: pessoa.cpf || null,
+          whatsapp: pessoa.whatsapp || null,
+          telefone: pessoa.telefone || null,
+          email: pessoa.email || null,
+          zona_eleitoral: pessoa.zona_eleitoral || null,
+          secao_eleitoral: pessoa.secao_eleitoral || null,
+          colegio_eleitoral: (pessoa as any).colegio_eleitoral || null,
+          municipio_eleitoral: pessoa.municipio || null,
+          titulo_eleitor: pessoa.titulo_eleitor || null,
+          regiao_atuacao: pessoa.municipio || null,
+        };
+        fetch(`${OWN_FUNCTIONS_URL}/receber-cadastro-externo`, {
           method: "POST",
-          headers: EXTERNAL_FUNCTIONS_HEADERS,
-          body: JSON.stringify({
-            tipo: visita.tipo_visitante,
-            nome: pessoa.nome,
-            cpf: pessoa.cpf || null,
-            whatsapp: pessoa.whatsapp || null,
-            indicador_tipo: visita.indicador_tipo,
-            indicador_id: visita.indicador_id,
-          }),
+          headers: OWN_FUNCTIONS_HEADERS,
+          body: JSON.stringify(cadastroPayload),
         }).then(r => r.json()).then(data => {
-          if (data.acao === "criado") {
-            toast({ title: "🔗 Sincronizado!", description: `${pessoa.nome} cadastrado(a) no sistema de campanha.` });
-          } else if (data.acao === "ja_existe") {
-            toast({ title: "ℹ️ Já cadastrado", description: `${pessoa.nome} já existe no sistema principal.` });
+          if (data.sucesso) {
+            toast({ title: "🔗 Sincronizado!", description: `${pessoa.nome} cadastrado(a) no sistema principal.` });
+          } else if (data.aviso) {
+            toast({ title: "ℹ️ Aviso", description: data.aviso });
           }
         }).catch(err => {
           console.error("Erro na sincronização:", err);
@@ -655,14 +647,14 @@ export default function NovaVisita() {
 
               {/* Quem indicou — busca via Edge Function */}
               <div className="space-y-1.5 relative" ref={indicadorContainerRef}>
-                <label className="text-xs font-bold text-foreground">Quem indicou</label>
+                <label className="text-xs font-bold text-foreground">Quem indicou / Responsável</label>
                 <div className="relative">
                   <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                   <input
                     value={indicadorBusca}
                     onChange={(e) => handleIndicadorInput(e.target.value)}
-                    onFocus={() => indicadorResultados.suplentes.length + indicadorResultados.liderancas.length > 0 && setIndicadorDropdownAberto(true)}
-                    placeholder="Buscar suplente ou liderança..."
+                    onFocus={() => indicadorResultados.length > 0 && setIndicadorDropdownAberto(true)}
+                    placeholder="Buscar por nome..."
                     className="w-full h-12 rounded-lg bg-background border border-border pl-9 pr-10 text-sm outline-none focus:ring-2 focus:ring-primary/30 transition-shadow placeholder:text-muted-foreground/50"
                   />
                   {indicadorBuscando && (
@@ -677,64 +669,29 @@ export default function NovaVisita() {
 
                 {indicadorSelecionado && (
                   <div className="flex items-center gap-1.5 mt-1">
-                    <span className={cn(
-                      "text-[10px] px-2 py-0.5 rounded-full font-semibold",
-                      indicadorSelecionado.tipo === "suplente"
-                        ? "bg-blue-500/15 text-blue-600"
-                        : "bg-green-500/15 text-green-600"
-                    )}>
-                      {indicadorSelecionado.tipo === "suplente" ? "Suplente" : "Liderança"}
+                    <span className={cn("text-[10px] px-2 py-0.5 rounded-full font-semibold", getTagColor(indicadorSelecionado.tipo))}>
+                      {indicadorSelecionado.tag}
                     </span>
-                    <span className="text-xs text-muted-foreground">{indicadorSelecionado.nome}</span>
+                    <span className="text-xs text-muted-foreground">{indicadorSelecionado.subtitulo || indicadorSelecionado.nome}</span>
                   </div>
                 )}
 
-                {indicadorDropdownAberto && (indicadorResultados.suplentes.length > 0 || indicadorResultados.liderancas.length > 0) && (
+                {indicadorDropdownAberto && indicadorResultados.length > 0 && (
                   <div className="absolute z-50 w-full mt-1 bg-card border border-border rounded-xl shadow-lg max-h-[280px] overflow-y-auto">
-                    {indicadorResultados.suplentes.length > 0 && (
-                      <>
-                        <div className="text-[10px] uppercase tracking-wide text-muted-foreground px-3 py-1.5 font-semibold border-b border-border/50 sticky top-0 bg-card">
-                          Suplentes
+                    {indicadorResultados.map((u) => (
+                      <button key={`${u.id}-${u.tipo}`} type="button" onClick={() => selecionarIndicador(u)}
+                        className="w-full text-left px-3 py-2.5 hover:bg-muted flex items-center justify-between transition-colors cursor-pointer border-b border-border/30 last:border-0">
+                        <div>
+                          <span className="text-sm font-semibold">{u.nome}</span>
+                          {u.subtitulo && (
+                            <p className="text-xs text-muted-foreground">{u.subtitulo}</p>
+                          )}
                         </div>
-                        {indicadorResultados.suplentes.map((s) => (
-                          <button key={s.id} type="button" onClick={() => selecionarIndicador(s, "suplente")}
-                            className="w-full text-left px-3 py-2.5 hover:bg-muted flex items-center justify-between transition-colors cursor-pointer">
-                            <div>
-                              <span className="text-sm font-semibold">{s.nome}</span>
-                              {(s.numero_urna || s.partido) && (
-                                <span className="text-xs text-muted-foreground ml-2">
-                                  {[s.numero_urna, s.partido].filter(Boolean).join(" · ")}
-                                </span>
-                              )}
-                            </div>
-                            <span className="bg-blue-500/15 text-blue-600 text-[10px] px-1.5 py-0.5 rounded-full font-semibold flex-shrink-0">
-                              Suplente
-                            </span>
-                          </button>
-                        ))}
-                      </>
-                    )}
-                    {indicadorResultados.liderancas.length > 0 && (
-                      <>
-                        <div className="text-[10px] uppercase tracking-wide text-muted-foreground px-3 py-1.5 font-semibold border-b border-border/50 sticky top-0 bg-card">
-                          Lideranças
-                        </div>
-                        {indicadorResultados.liderancas.map((l) => (
-                          <button key={l.id} type="button" onClick={() => selecionarIndicador(l, "lideranca")}
-                            className="w-full text-left px-3 py-2.5 hover:bg-muted flex items-center justify-between transition-colors cursor-pointer">
-                            <div>
-                              <span className="text-sm font-semibold">{l.nome}</span>
-                              {l.regiao && (
-                                <span className="text-xs text-muted-foreground ml-2">{l.regiao}</span>
-                              )}
-                            </div>
-                            <span className="bg-green-500/15 text-green-600 text-[10px] px-1.5 py-0.5 rounded-full font-semibold flex-shrink-0">
-                              Liderança
-                            </span>
-                          </button>
-                        ))}
-                      </>
-                    )}
+                        <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-semibold flex-shrink-0", getTagColor(u.tipo))}>
+                          {u.tag}
+                        </span>
+                      </button>
+                    ))}
                   </div>
                 )}
               </div>
