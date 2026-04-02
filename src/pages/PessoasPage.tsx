@@ -20,8 +20,8 @@ export default function PessoasPage() {
       .from("pessoas")
       .select("*, visitas(id, data_hora)")
       .order("nome");
-    // Filtra no cliente: esconde apenas pessoas explicitamente desativadas
-    setPessoas((data || []).filter((p: any) => p.ativo !== false));
+    // Filtra: esconde pessoas marcadas como DESATIVADO
+    setPessoas((data || []).filter((p: any) => p.origem !== "DESATIVADO"));
     setLoading(false);
   }
 

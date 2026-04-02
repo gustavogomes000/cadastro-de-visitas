@@ -134,8 +134,7 @@ export default function PessoaDetalhePage() {
         <button
           onClick={async () => {
             if (!confirm("Deseja desativar esta pessoa? Ela não será excluída, apenas ocultada.")) return;
-            // @ts-ignore – coluna ativo adicionada via migration
-            const { error } = await supabase.from("pessoas").update({ ativo: false } as any).eq("id", id);
+            const { error } = await supabase.from("pessoas").update({ origem: "DESATIVADO" }).eq("id", id);
             if (error) {
               toast({ title: "Erro ao desativar", description: error.message, variant: "destructive" });
             } else {
