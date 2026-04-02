@@ -109,6 +109,38 @@ Deno.serve(async (req) => {
       insertedId = data.id;
     }
 
+    // Fire-and-forget: encaminhar para o app principal
+    const PRINCIPAL_TOKEN = Deno.env.get("CADASTRO_EXTERNO_TOKEN_PRINCIPAL");
+    if (PRINCIPAL_TOKEN) {
+      const forwardPayload = {
+        tipo: tipo || "eleitor",
+        indicador_id: indicador_id,
+        indicador_tipo: indicador_tipo || "recepcao",
+        indicador_nome: indicador_nome || null,
+        nome: cleanNome,
+        cpf: cleanCpf,
+        whatsapp: whatsapp || null,
+        telefone: telefone || null,
+        email: email || null,
+        zona_eleitoral: zona_eleitoral || null,
+        secao_eleitoral: secao_eleitoral || null,
+        titulo_eleitor: titulo_eleitor || null,
+        regiao_atuacao: regiao_atuacao || null,
+      };
+      fetch("https://yvdfdmyusdhgtzfguxbj.supabase.co/functions/v1/receber-cadastro-externo", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-token": PRINCIPAL_TOKEN,
+        },
+        body: JSON.stringify(forwardPayload),
+      }).then(r => r.text()).then(t => {
+        console.log("[SYNC PRINCIPAL] Resposta:", t);
+      }).catch(err => {
+        console.error("[SYNC PRINCIPAL] Erro:", err);
+      });
+    }
+
     return new Response(JSON.stringify({
       sucesso: true, tipo: tipo || "eleitor", id: insertedId,
     }), {
