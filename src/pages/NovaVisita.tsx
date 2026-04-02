@@ -102,18 +102,22 @@ async function fetchAllUsuariosExternos(): Promise<UsuarioExterno[]> {
   if (usuariosCacheGlobal) return usuariosCacheGlobal;
   if (usuariosCachePromise) return usuariosCachePromise;
 
-  usuariosCachePromise = fetch(`${OWN_FUNCTIONS_URL}/listar-usuarios-externos`, {
+  usuariosCachePromise = fetch(`${EXTERNAL_FUNCTIONS_URL}/listar-usuarios-externos`, {
     method: "GET",
-    headers: OWN_FUNCTIONS_HEADERS,
+    headers: EXTERNAL_FUNCTIONS_HEADERS,
   })
-    .then(r => r.ok ? r.json() : [])
+    .then(r => {
+      if (!r.ok) throw new Error(`Status ${r.status}`);
+      return r.json();
+    })
     .then((data: unknown) => {
       const result = Array.isArray(data) ? data as UsuarioExterno[] : [];
       usuariosCacheGlobal = result;
       usuariosCachePromise = null;
       return result;
     })
-    .catch(() => {
+    .catch((err) => {
+      console.error("Erro ao buscar usuarios externos:", err);
       usuariosCachePromise = null;
       return [] as UsuarioExterno[];
     });
