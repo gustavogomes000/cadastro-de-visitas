@@ -1,4 +1,4 @@
-import { supabase } from "@/integrations/supabase/client";
+import { createClient } from "@supabase/supabase-js";
 
 export interface UsuarioExterno {
   id: string;
@@ -9,6 +9,20 @@ export interface UsuarioExterno {
   municipio?: string;
   fonte?: string;
 }
+
+const EXTERNAL_SUPABASE_URL =
+  import.meta.env.VITE_SUPABASE_URL || "https://hzhxrkurljrogxtzxmmb.supabase.co";
+const EXTERNAL_SUPABASE_ANON_KEY =
+  import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh6aHhya3VybGpyb2d4dHp4bW1iIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0OTg1MzgsImV4cCI6MjA4OTA3NDUzOH0.lfvD6V7qCQ1eckbk2QbkSKF2rkz2uYEpmuqHqjquoPY";
+
+const externalSupabase = createClient(EXTERNAL_SUPABASE_URL, EXTERNAL_SUPABASE_ANON_KEY, {
+  auth: {
+    persistSession: false,
+    autoRefreshToken: false,
+    detectSessionInUrl: false,
+  },
+});
 
 let usuariosCacheGlobal: UsuarioExterno[] | null = null;
 let usuariosCachePromise: Promise<UsuarioExterno[]> | null = null;
@@ -46,8 +60,15 @@ function normalizarUsuarios(suplentes: any[], liderancas: any[]): UsuarioExterno
   return usuarios.sort((a, b) => (a.nome || "").localeCompare(b.nome || ""));
 }
 
+export function filterUsuariosExternos(usuarios: UsuarioExterno[], termo: string) {
+  const normalized = termo.trim().toLowerCase();
+  if (normalized.length < 2) return [];
+  return usuarios.filter((u) => (u.nome || "").toLowerCase().includes(normalized));
+}
+
 export function invalidateUsuariosExternosCache() {
   usuariosCacheGlobal = null;
+  usuariosCachePromise = null;
   lastFetchAt = 0;
 }
 
@@ -65,10 +86,10 @@ export async function fetchAllUsuariosExternos(options?: { force?: boolean }): P
 
   usuariosCachePromise = (async () => {
     const [suplRes, lidRes] = await Promise.all([
-      supabase
+      externalSupabase
         .from("suplentes")
         .select("id, nome, partido, numero_urna, cargo_disputado, telefone, municipio_id, situacao, regiao_atuacao"),
-      supabase
+      externalSupabase
         .from("liderancas")
         .select("id, nome, whatsapp, cpf, regiao, municipio_id, ligacao_politica"),
     ]);
@@ -95,13 +116,13 @@ export function subscribeToUsuariosExternos(onChange: () => void, channelKey: st
     onChange();
   };
 
-  const channel = supabase
+  const channel = externalSupabase
     .channel(`usuarios-externos-${channelKey}`)
     .on("postgres_changes", { event: "*", schema: "public", table: "suplentes" }, handleChange)
     .on("postgres_changes", { event: "*", schema: "public", table: "liderancas" }, handleChange)
     .subscribe();
 
   return () => {
-    void supabase.removeChannel(channel);
+    void externalSupabase.removeChannel(channel);
   };
 }
