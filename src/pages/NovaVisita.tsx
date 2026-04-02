@@ -188,13 +188,14 @@ export default function NovaVisita() {
     if (nomeDebounceRef.current) clearTimeout(nomeDebounceRef.current);
     setNomeBuscando(true);
     nomeDebounceRef.current = setTimeout(async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("pessoas")
         .select("id, nome, cpf, municipio, uf, whatsapp")
-        .neq("origem", "DESATIVADO")
+        .or("origem.is.null,origem.neq.DESATIVADO")
         .ilike("nome", `%${termo}%`)
         .order("nome")
         .limit(8);
+      console.log("[autocomplete nome]", termo, "results:", data?.length, "error:", error?.message);
       setNomeSugestoes(data || []);
       setNomeDropdownAberto(true);
       setNomeBuscando(false);
