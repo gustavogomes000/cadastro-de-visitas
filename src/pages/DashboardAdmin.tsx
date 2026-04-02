@@ -380,6 +380,46 @@ export default function DashboardAdmin() {
         </div>
       )}
 
+      {/* Ranking de visitantes */}
+      {rankingVisitantes.length > 0 && (
+        <div className="card-section mb-4 animate-fade-in">
+          <div className="flex items-center gap-2 mb-3">
+            <Star size={14} className="text-primary" />
+            <p className="text-xs font-bold text-primary uppercase tracking-wide">Top visitantes</p>
+          </div>
+          <div className="space-y-2">
+            {rankingVisitantes.map((r, i) => {
+              const barWidth = rankingVisitantes[0].count > 0 ? Math.max((r.count / rankingVisitantes[0].count) * 100, 8) : 8;
+              return (
+                <div key={r.id} className="flex items-center gap-2 cursor-pointer hover:bg-muted/50 rounded-lg px-1 py-0.5 transition-colors" onClick={() => navigate(`/pessoa/${r.id}`)}>
+                  <span className={cn(
+                    "w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0",
+                    i === 0 ? "bg-primary/20 text-primary" :
+                    i === 1 ? "bg-gray-300/30 text-gray-500" :
+                    i === 2 ? "bg-orange-400/20 text-orange-500" :
+                    "bg-muted text-muted-foreground"
+                  )}>
+                    {i + 1}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <span className="text-xs font-semibold truncate block">{r.nome}</span>
+                    <div className="mt-0.5 h-1.5 bg-muted rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-primary/40 transition-all duration-500"
+                        style={{ width: `${barWidth}%` }}
+                      />
+                    </div>
+                  </div>
+                  <span className="text-xs font-bold text-primary flex-shrink-0 min-w-[28px] text-right">
+                    {r.count}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Tabs */}
       <div className="flex gap-2 mb-4 overflow-x-auto">
         {tabs.map(tab => (
