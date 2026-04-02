@@ -242,7 +242,9 @@ export default function NovaVisita() {
   // Preload usuarios on mount
   const allUsuariosRef = useRef<UsuarioExterno[]>([]);
   useEffect(() => {
-    fetchAllUsuariosExternos().then(data => { allUsuariosRef.current = data; });
+    fetchAllUsuariosExternos()
+      .then(data => { allUsuariosRef.current = data; })
+      .catch(err => console.error("[NovaVisita] Erro ao carregar usuarios:", err));
   }, []);
 
   useEffect(() => {
