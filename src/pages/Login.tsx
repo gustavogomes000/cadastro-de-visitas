@@ -68,11 +68,10 @@ export default function Login() {
     } else {
       if (remember) {
         localStorage.setItem("saved_user", username.trim());
-        localStorage.setItem("saved_pass", password);
       } else {
         localStorage.removeItem("saved_user");
-        localStorage.removeItem("saved_pass");
       }
+      // Never store passwords in localStorage
     }
     setLoading(false);
   };
