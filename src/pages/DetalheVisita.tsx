@@ -157,9 +157,6 @@ export default function DetalheVisita() {
               >
                 <div className="flex justify-between items-center">
                   <span className="text-sm">{h.assunto || "–"}</span>
-                  <span className={cn("text-[10px] px-2 py-0.5 rounded-full", getStatusColor(h.status))}>
-                    {h.status}
-                  </span>
                 </div>
                 <span className="text-[10px] text-muted-foreground">{formatDateTime(h.data_hora)}</span>
               </button>
