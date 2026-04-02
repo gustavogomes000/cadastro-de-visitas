@@ -306,23 +306,6 @@ export default function EditarVisita() {
           </Field>
         </div>
 
-        <div className="card-section space-y-4">
-          <p className="text-sm font-bold text-primary uppercase tracking-wide">Tratativa</p>
-          <Field label="Status">
-            <select value={status} onChange={(e) => setStatus(e.target.value)}
-              className="w-full h-12 rounded-lg bg-background border border-border px-4 text-sm outline-none focus:ring-2 focus:ring-primary/30 transition-shadow appearance-none">
-              {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
-          </Field>
-          <Field label="Responsável pela tratativa">
-            <input type="text" value={responsavel} onChange={(e) => setResponsavel(e.target.value)} placeholder="Nome" className={inputClass} />
-          </Field>
-          <Field label="Observações">
-            <textarea value={observacoes} onChange={(e) => setObservacoes(e.target.value)} placeholder="Observações..." rows={3}
-              className="w-full rounded-lg bg-background border border-border px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-primary/30 transition-shadow placeholder:text-muted-foreground/50 resize-none" />
-          </Field>
-        </div>
-
         <button onClick={handleSave} disabled={saving}
           className="w-full h-12 rounded-lg font-bold text-white gradient-primary shadow-lg shadow-pink-500/25 active:scale-[0.98] transition-transform disabled:opacity-70 flex items-center justify-center gap-2 text-base">
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
