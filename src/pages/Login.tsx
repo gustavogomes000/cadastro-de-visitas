@@ -47,12 +47,16 @@ export default function Login() {
   const { signIn } = useAuth();
   
   const [username, setUsername] = useState(() => localStorage.getItem("saved_user") || "");
-  const [password, setPassword] = useState(() => localStorage.getItem("saved_pass") || "");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [remember, setRemember] = useState(() => !!localStorage.getItem("saved_user"));
 
+  // Clean up any previously stored password
+  if (typeof window !== "undefined" && localStorage.getItem("saved_pass")) {
+    localStorage.removeItem("saved_pass");
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -68,11 +72,10 @@ export default function Login() {
     } else {
       if (remember) {
         localStorage.setItem("saved_user", username.trim());
-        localStorage.setItem("saved_pass", password);
       } else {
         localStorage.removeItem("saved_user");
-        localStorage.removeItem("saved_pass");
       }
+      // Never store passwords in localStorage
     }
     setLoading(false);
   };

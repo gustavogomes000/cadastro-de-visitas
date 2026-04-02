@@ -85,20 +85,26 @@ let usuariosCachePromise: Promise<UsuarioExterno[]> | null = null;
 const SUPABASE_PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID || "hzhxrkurljrogxtzxmmb";
 const OWN_FUNCTIONS_URL = `https://${SUPABASE_PROJECT_ID}.supabase.co/functions/v1`;
 const OWN_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-const OWN_FUNCTIONS_HEADERS = {
-  "Content-Type": "application/json",
-  apikey: OWN_ANON_KEY,
-  Authorization: `Bearer ${OWN_ANON_KEY}`,
-};
+
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  const { data } = await supabase.auth.getSession();
+  const token = data?.session?.access_token || OWN_ANON_KEY;
+  return {
+    "Content-Type": "application/json",
+    apikey: OWN_ANON_KEY,
+    Authorization: `Bearer ${token}`,
+  };
+}
 
 async function fetchAllUsuariosExternos(): Promise<UsuarioExterno[]> {
   if (usuariosCacheGlobal) return usuariosCacheGlobal;
   if (usuariosCachePromise) return usuariosCachePromise;
 
   usuariosCachePromise = (async () => {
+    const headers = await getAuthHeaders();
     const r = await fetch(`${OWN_FUNCTIONS_URL}/listar-usuarios-externos`, {
       method: "GET",
-      headers: OWN_FUNCTIONS_HEADERS,
+      headers,
     });
     if (!r.ok) throw new Error(`Status ${r.status}`);
     const data = await r.json();
@@ -492,18 +498,20 @@ export default function NovaVisita() {
           titulo_eleitor: pessoa.titulo_eleitor || null,
           regiao_atuacao: pessoa.municipio || null,
         };
-      fetch(`${OWN_FUNCTIONS_URL}/receber-cadastro-externo`, {
-          method: "POST",
-          headers: OWN_FUNCTIONS_HEADERS,
-          body: JSON.stringify(cadastroPayload),
-        }).then(r => r.json()).then(data => {
-          if (data.sucesso) {
-            toast({ title: "🔗 Sincronizado!", description: `${pessoa.nome} cadastrado(a) no sistema principal.` });
-          } else if (data.aviso) {
-            toast({ title: "ℹ️ Aviso", description: data.aviso });
-          }
-        }).catch(err => {
-          console.error("Erro na sincronização:", err);
+        getAuthHeaders().then(headers => {
+          fetch(`${OWN_FUNCTIONS_URL}/receber-cadastro-externo`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify(cadastroPayload),
+          }).then(r => r.json()).then(data => {
+            if (data.sucesso) {
+              toast({ title: "🔗 Sincronizado!", description: `${pessoa.nome} cadastrado(a) no sistema principal.` });
+            } else if (data.aviso) {
+              toast({ title: "ℹ️ Aviso", description: data.aviso });
+            }
+          }).catch(err => {
+            console.error("Erro na sincronização:", err);
+          });
         });
       }
 
