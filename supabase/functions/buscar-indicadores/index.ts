@@ -22,14 +22,10 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const termo = (body.termo || body.busca || "").trim();
 
-    // Debug mode
+    // Debug mode - return empty results without leaking keys
     if (!termo || termo === "debug") {
-      const r = await fetch(`${EXTERNAL_URL}/rest/v1/hierarquia_usuarios?select=id,nome,tipo&limit=5`, {
-        headers: { apikey: EXTERNAL_KEY, Authorization: `Bearer ${EXTERNAL_KEY}` },
-      });
-      const d = await r.text();
       return new Response(
-        JSON.stringify({ status: r.status, data: d.substring(0, 1000), key_start: EXTERNAL_KEY.substring(0, 30) }),
+        JSON.stringify({ suplentes: [], liderancas: [], message: "Termo vazio" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
