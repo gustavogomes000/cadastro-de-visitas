@@ -19,7 +19,7 @@ export default function PessoasPage() {
     const { data } = await supabase
       .from("pessoas")
       .select("*, visitas(id, data_hora)")
-      .neq("ativo", false)
+      .neq("ativo" as any, false)
       .order("nome");
     setPessoas(data || []);
     setLoading(false);
