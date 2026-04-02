@@ -26,6 +26,8 @@ Deno.serve(async (req) => {
       headers: {
         "Content-Type": "application/json",
         "x-api-token": EXTERNAL_KEY,
+        "Authorization": `Bearer ${EXTERNAL_KEY}`,
+        "apikey": EXTERNAL_KEY,
       },
       body: JSON.stringify(body),
     });

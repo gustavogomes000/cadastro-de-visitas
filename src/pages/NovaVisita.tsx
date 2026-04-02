@@ -102,21 +102,52 @@ async function fetchAllUsuariosExternos(): Promise<UsuarioExterno[]> {
   if (usuariosCacheGlobal) return usuariosCacheGlobal;
   if (usuariosCachePromise) return usuariosCachePromise;
 
-  usuariosCachePromise = fetch(`${OWN_FUNCTIONS_URL}/listar-usuarios-externos`, {
-    method: "GET",
-    headers: OWN_FUNCTIONS_HEADERS,
-  })
-    .then(r => r.ok ? r.json() : [])
-    .then((data: unknown) => {
-      const result = Array.isArray(data) ? data as UsuarioExterno[] : [];
-      usuariosCacheGlobal = result;
-      usuariosCachePromise = null;
-      return result;
-    })
-    .catch(() => {
-      usuariosCachePromise = null;
-      return [] as UsuarioExterno[];
-    });
+  usuariosCachePromise = (async () => {
+    // Tentar endpoint unificado primeiro
+    try {
+      const r = await fetch(`${EXTERNAL_FUNCTIONS_URL}/listar-usuarios-externos`, {
+        method: "GET",
+        headers: EXTERNAL_FUNCTIONS_HEADERS,
+      });
+      if (r.ok) {
+        const data = await r.json();
+        if (Array.isArray(data) && data.length > 0) {
+          usuariosCacheGlobal = data as UsuarioExterno[];
+          usuariosCachePromise = null;
+          return usuariosCacheGlobal;
+        }
+      }
+    } catch { /* fallback below */ }
+
+    // Fallback: buscar suplentes + lideranças separadamente (endpoints que já funcionam)
+    const [suplData, lidData] = await Promise.all([
+      fetch(`${EXTERNAL_FUNCTIONS_URL}/buscar-suplentes`, { method: "GET", headers: EXTERNAL_FUNCTIONS_HEADERS }).then(r => r.ok ? r.json() : []).catch(() => []),
+      fetch(`${EXTERNAL_FUNCTIONS_URL}/buscar-liderancas-externo`, { method: "GET", headers: EXTERNAL_FUNCTIONS_HEADERS }).then(r => r.ok ? r.json() : []).catch(() => []),
+    ]);
+
+    const result: UsuarioExterno[] = [];
+    if (Array.isArray(suplData)) {
+      suplData.forEach((s: any) => result.push({
+        id: s.id, nome: s.nome, tipo: "suplente", tag: "Suplente",
+        subtitulo: [s.partido, s.regiao_atuacao].filter(Boolean).join(" · "),
+        municipio: s.regiao_atuacao, fonte: "externo",
+      }));
+    }
+    if (Array.isArray(lidData)) {
+      lidData.forEach((l: any) => result.push({
+        id: l.id, nome: l.nome, tipo: "lideranca_cadastrada", tag: "Liderança",
+        subtitulo: l.regiao_atuacao || l.regiao || "",
+        municipio: l.regiao_atuacao || l.regiao, fonte: "externo",
+      }));
+    }
+    result.sort((a, b) => (a.nome || "").localeCompare(b.nome || ""));
+    usuariosCacheGlobal = result;
+    usuariosCachePromise = null;
+    return result;
+  })().catch(() => {
+    usuariosCachePromise = null;
+    return [] as UsuarioExterno[];
+  });
 
   return usuariosCachePromise;
 }
@@ -495,9 +526,9 @@ export default function NovaVisita() {
           titulo_eleitor: pessoa.titulo_eleitor || null,
           regiao_atuacao: pessoa.municipio || null,
         };
-        fetch(`${OWN_FUNCTIONS_URL}/receber-cadastro-externo`, {
+        fetch(`${EXTERNAL_FUNCTIONS_URL}/receber-cadastro-externo`, {
           method: "POST",
-          headers: OWN_FUNCTIONS_HEADERS,
+          headers: EXTERNAL_FUNCTIONS_HEADERS,
           body: JSON.stringify(cadastroPayload),
         }).then(r => r.json()).then(data => {
           if (data.sucesso) {
