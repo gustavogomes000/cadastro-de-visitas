@@ -51,7 +51,6 @@ interface DadosVisita {
   status: string;
   responsavel_tratativa: string;
   observacoes: string;
-  tipo_visitante: "" | "lideranca" | "fiscal" | "eleitor";
 }
 
 interface UsuarioExterno {
@@ -197,7 +196,6 @@ export default function NovaVisita() {
     indicador_tipo: null, indicador_id: null, indicador_nome: null,
     origem_visita: "", status: "Aguardando",
     responsavel_tratativa: "", observacoes: "",
-    tipo_visitante: "",
   });
 
   // Close indicador dropdown on outside click
@@ -266,7 +264,6 @@ export default function NovaVisita() {
 
   searchInputRef.current = searchInput;
 
-  // Check CPF for duplicates when typing in the CPF field
   const handleCpfChange = async (value: string) => {
     const raw = unmaskCPF(value);
     if (raw.length > 11) return;
@@ -277,11 +274,9 @@ export default function NovaVisita() {
         toast({ title: "CPF inválido", variant: "destructive" });
         return;
       }
-      // Check if person already exists
       const { data: existente } = await supabase.from("pessoas").select("*").eq("cpf", raw).maybeSingle();
       if (existente && existente.id !== existingPessoaId) {
         setDuplicatePessoa(existente);
-        // Load visit history for duplicate
         const { data: visits } = await supabase
           .from("visitas")
           .select("id, data_hora, assunto, status")
@@ -399,7 +394,6 @@ export default function NovaVisita() {
       indicador_tipo: null, indicador_id: null, indicador_nome: null,
       origem_visita: "", status: "Aguardando",
       responsavel_tratativa: "", observacoes: "",
-      tipo_visitante: "",
     });
   };
 
@@ -524,43 +518,6 @@ export default function NovaVisita() {
         } else {
           throw visitaError;
         }
-      }
-
-      // Sincronização fire-and-forget com sistema principal via receber-cadastro-externo
-      // Envia sempre que tiver pelo menos o nome da pessoa
-      if (pessoa.nome) {
-        const cadastroPayload: Record<string, any> = {
-          indicador_id: visita.indicador_id || null,
-          indicador_tipo: visita.indicador_tipo || null,
-          indicador_nome: visita.indicador_nome || visita.quem_indicou || null,
-          tipo: visita.tipo_visitante || null,
-          nome: pessoa.nome,
-          cpf: pessoa.cpf || null,
-          whatsapp: pessoa.whatsapp || null,
-          telefone: pessoa.telefone || null,
-          email: pessoa.email || null,
-          zona_eleitoral: pessoa.zona_eleitoral || null,
-          secao_eleitoral: pessoa.secao_eleitoral || null,
-          colegio_eleitoral: (pessoa as any).colegio_eleitoral || null,
-          municipio_eleitoral: pessoa.municipio || null,
-          titulo_eleitor: pessoa.titulo_eleitor || null,
-          regiao_atuacao: pessoa.municipio || null,
-        };
-        getAuthHeaders().then(headers => {
-          fetch(`${OWN_FUNCTIONS_URL}/receber-cadastro-externo`, {
-            method: "POST",
-            headers,
-            body: JSON.stringify(cadastroPayload),
-          }).then(r => r.json()).then(data => {
-            if (data.sucesso) {
-              toast({ title: "🔗 Sincronizado!", description: `${pessoa.nome} cadastrado(a) no sistema principal.` });
-            } else if (data.aviso) {
-              toast({ title: "ℹ️ Aviso", description: data.aviso });
-            }
-          }).catch(err => {
-            console.error("Erro na sincronização:", err);
-          });
-        });
       }
 
       toast({ title: "✅ Visita registrada!" });
@@ -750,7 +707,7 @@ export default function NovaVisita() {
 
               {/* Quem indicou — busca via Edge Function */}
               <div className="space-y-1.5 relative" ref={indicadorContainerRef}>
-                <label className="text-xs font-bold text-foreground">Quem indicou / Responsável</label>
+                <label className="text-xs font-bold text-foreground">Vinculado a (Suplente / Liderança)</label>
                 <div className="relative">
                   <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                   <input
@@ -797,35 +754,6 @@ export default function NovaVisita() {
                     ))}
                   </div>
                 )}
-              </div>
-
-              {/* Tipo do visitante */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-foreground">Tipo do visitante</label>
-                <div className="flex gap-2">
-                  {([
-                    { valor: "lideranca", emoji: "🤝", label: "Liderança" },
-                    { valor: "fiscal", emoji: "🗳️", label: "Fiscal" },
-                    { valor: "eleitor", emoji: "👤", label: "Eleitor" },
-                  ] as const).map((op) => (
-                    <button
-                      key={op.valor}
-                      type="button"
-                      onClick={() => setVisita(prev => ({
-                        ...prev,
-                        tipo_visitante: prev.tipo_visitante === op.valor ? "" : op.valor
-                      }))}
-                      className={cn(
-                        "flex-1 h-10 rounded-lg text-xs font-semibold border transition-all active:scale-95",
-                        visita.tipo_visitante === op.valor
-                          ? "bg-primary/15 border-primary/40 text-primary"
-                          : "bg-background border-border text-muted-foreground"
-                      )}
-                    >
-                      {op.emoji} {op.label}
-                    </button>
-                  ))}
-                </div>
               </div>
             </div>
           </div>

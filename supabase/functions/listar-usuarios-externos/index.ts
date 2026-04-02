@@ -13,7 +13,6 @@ Deno.serve(async (req) => {
   try {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
     // Verify auth
     const authHeader = req.headers.get("Authorization");
@@ -34,60 +33,82 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Use service role for queries (bypasses RLS)
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-
-    const [suplRes, lidRes, fiscRes, adminRes, usuariosRes] = await Promise.all([
-      supabase.from("suplentes").select("id, nome, partido, regiao_atuacao"),
-      supabase.from("liderancas").select("id, nome, ligacao_politica, regiao"),
-      supabase.from("fiscais").select("id, nome"),
-      supabase.from("administrativo").select("id, nome"),
-      supabase.from("usuarios").select("id, user_id, nome_usuario, email"),
-    ]);
+    // Fetch from EXTERNAL bank
+    const EXTERNAL_URL = Deno.env.get("EXTERNAL_SUPABASE_URL");
+    const EXTERNAL_KEY = Deno.env.get("EXTERNAL_SUPABASE_SERVICE_KEY") || Deno.env.get("EXTERNO_SUPABASE_SERVICE_ROLE_KEY");
 
     const result: any[] = [];
 
-    (suplRes.data || []).forEach((s: any) => result.push({
-      id: s.id, nome: s.nome, tipo: "suplente", tag: "Suplente",
-      subtitulo: [s.partido, s.regiao_atuacao].filter(Boolean).join(" · "),
-      municipio: s.regiao_atuacao || "", fonte: "local",
-    }));
+    if (EXTERNAL_URL && EXTERNAL_KEY) {
+      const restHeaders = {
+        apikey: EXTERNAL_KEY,
+        Authorization: `Bearer ${EXTERNAL_KEY}`,
+      };
 
-    (lidRes.data || []).forEach((l: any) => result.push({
-      id: l.id, nome: l.nome, tipo: "lideranca_cadastrada", tag: "Liderança",
-      subtitulo: [l.ligacao_politica, l.regiao].filter(Boolean).join(" · "),
-      municipio: l.regiao || "", fonte: "local",
-    }));
+      // Fetch suplentes and liderancas from external bank
+      const [suplRes, lidRes] = await Promise.all([
+        fetch(`${EXTERNAL_URL}/rest/v1/suplentes?select=id,nome,partido,regiao_atuacao,numero_urna`, { headers: restHeaders }).then(r => r.ok ? r.json() : []).catch(() => []),
+        fetch(`${EXTERNAL_URL}/rest/v1/liderancas?select=id,nome,ligacao_politica,regiao`, { headers: restHeaders }).then(r => r.ok ? r.json() : []).catch(() => []),
+      ]);
 
-    (fiscRes.data || []).forEach((f: any) => result.push({
-      id: f.id, nome: f.nome, tipo: "fiscal_cadastrado", tag: "Fiscal",
-      subtitulo: "", municipio: "", fonte: "local",
-    }));
+      // Also try hierarquia_usuarios if available
+      const hierRes = await fetch(`${EXTERNAL_URL}/rest/v1/hierarquia_usuarios?select=id,nome,tipo&limit=500`, { headers: restHeaders }).then(r => r.ok ? r.json() : []).catch(() => []);
 
-    (adminRes.data || []).forEach((a: any) => result.push({
-      id: a.id, nome: a.nome, tipo: "coordenador", tag: "Coordenador",
-      subtitulo: "", municipio: "", fonte: "local",
-    }));
+      if (Array.isArray(suplRes)) {
+        suplRes.forEach((s: any) => result.push({
+          id: s.id, nome: s.nome, tipo: "suplente", tag: "Suplente",
+          subtitulo: [s.partido, s.regiao_atuacao, s.numero_urna].filter(Boolean).join(" · "),
+          municipio: s.regiao_atuacao || "", fonte: "externo",
+        }));
+      }
 
-    if (usuariosRes.data && usuariosRes.data.length > 0) {
-      const userIds = usuariosRes.data.map((u: any) => u.user_id);
-      const { data: roles } = await supabase
-        .from("user_roles")
-        .select("user_id, role")
-        .in("user_id", userIds);
+      if (Array.isArray(lidRes)) {
+        lidRes.forEach((l: any) => result.push({
+          id: l.id, nome: l.nome, tipo: "lideranca_cadastrada", tag: "Liderança",
+          subtitulo: [l.ligacao_politica, l.regiao].filter(Boolean).join(" · "),
+          municipio: l.regiao || "", fonte: "externo",
+        }));
+      }
 
-      const roleMap: Record<string, string> = {};
-      (roles || []).forEach((r: any) => { roleMap[r.user_id] = r.role; });
-
-      usuariosRes.data.forEach((u: any) => {
-        const role = roleMap[u.user_id] || "recepcao";
-        const tipo = role === "admin" ? "super_admin" : role;
-        const tag = role === "admin" ? "Super Admin" : role === "recepcao" ? "Recepção" : role;
-        result.push({
-          id: u.id, nome: u.nome_usuario, tipo, tag,
-          subtitulo: u.email, municipio: "", fonte: "local",
+      // Add hierarquia data if not already present
+      if (Array.isArray(hierRes)) {
+        const existingNames = new Set(result.map(r => (r.nome || "").toLowerCase().trim()));
+        hierRes.forEach((h: any) => {
+          const nameLower = (h.nome || "").toLowerCase().trim();
+          if (!existingNames.has(nameLower)) {
+            const tipo = h.tipo === "suplente" ? "suplente" : "lideranca_cadastrada";
+            const tag = h.tipo === "suplente" ? "Suplente" : "Liderança";
+            result.push({
+              id: h.id, nome: h.nome, tipo, tag,
+              subtitulo: "", municipio: "", fonte: "externo",
+            });
+            existingNames.add(nameLower);
+          }
         });
-      });
+      }
+    }
+
+    // Fallback: also fetch from LOCAL tables if external didn't return results
+    if (result.length === 0) {
+      const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+      const [suplRes, lidRes] = await Promise.all([
+        supabase.from("suplentes").select("id, nome, partido, regiao_atuacao"),
+        supabase.from("liderancas").select("id, nome, ligacao_politica, regiao"),
+      ]);
+
+      (suplRes.data || []).forEach((s: any) => result.push({
+        id: s.id, nome: s.nome, tipo: "suplente", tag: "Suplente",
+        subtitulo: [s.partido, s.regiao_atuacao].filter(Boolean).join(" · "),
+        municipio: s.regiao_atuacao || "", fonte: "local",
+      }));
+
+      (lidRes.data || []).forEach((l: any) => result.push({
+        id: l.id, nome: l.nome, tipo: "lideranca_cadastrada", tag: "Liderança",
+        subtitulo: [l.ligacao_politica, l.regiao].filter(Boolean).join(" · "),
+        municipio: l.regiao || "", fonte: "local",
+      }));
     }
 
     // Deduplicate by nome
