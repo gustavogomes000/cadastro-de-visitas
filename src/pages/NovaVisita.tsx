@@ -44,8 +44,9 @@ interface DadosVisita {
   assunto: string;
   descricao_assunto: string;
   quem_indicou: string;
-  indicador_tipo: "suplente" | "lideranca" | null;
+  indicador_tipo: string | null;
   indicador_id: string | null;
+  indicador_nome: string | null;
   origem_visita: string;
   status: string;
   responsavel_tratativa: string;
@@ -53,87 +54,55 @@ interface DadosVisita {
   tipo_visitante: "" | "lideranca" | "fiscal" | "eleitor";
 }
 
-type IndicadorTipo = "suplente" | "lideranca";
-
-interface IndicadorResumo {
+interface UsuarioExterno {
   id: string;
   nome: string;
-  numero_urna?: string | null;
-  partido?: string | null;
-  regiao?: string | null;
+  tipo: string;
+  tag: string;
+  subtitulo?: string;
+  municipio?: string;
+  fonte?: string;
 }
 
-interface IndicadorResultados {
-  suplentes: IndicadorResumo[];
-  liderancas: IndicadorResumo[];
+function getTagColor(tipo: string): string {
+  switch (tipo) {
+    case "suplente": return "bg-emerald-500/15 text-emerald-600";
+    case "super_admin":
+    case "coordenador": return "bg-purple-500/15 text-purple-600";
+    case "lideranca":
+    case "lideranca_cadastrada": return "bg-blue-500/15 text-blue-600";
+    case "fiscal":
+    case "fiscal_cadastrado": return "bg-orange-500/15 text-orange-600";
+    case "eleitor_cadastrado": return "bg-gray-500/15 text-gray-500";
+    default: return "bg-muted text-muted-foreground";
+  }
 }
-
-const createEmptyIndicadorResultados = (): IndicadorResultados => ({ suplentes: [], liderancas: [] });
 
 // Cache global para evitar re-fetch entre renders
-let indicadorCacheGlobal: IndicadorResultados | null = null;
-let indicadorCachePromise: Promise<IndicadorResultados> | null = null;
+let usuariosCacheGlobal: UsuarioExterno[] | null = null;
+let usuariosCachePromise: Promise<UsuarioExterno[]> | null = null;
 
-async function fetchAllIndicadores(): Promise<IndicadorResultados> {
-  if (indicadorCacheGlobal) return indicadorCacheGlobal;
-  if (indicadorCachePromise) return indicadorCachePromise;
+async function fetchAllUsuariosExternos(): Promise<UsuarioExterno[]> {
+  if (usuariosCacheGlobal) return usuariosCacheGlobal;
+  if (usuariosCachePromise) return usuariosCachePromise;
 
-  indicadorCachePromise = Promise.all([
-    fetch(`${EXTERNAL_FUNCTIONS_URL}/buscar-suplentes`, { method: "GET", headers: EXTERNAL_FUNCTIONS_HEADERS }).then(r => r.ok ? r.json() : []),
-    fetch(`${EXTERNAL_FUNCTIONS_URL}/buscar-liderancas-externo`, { method: "GET", headers: EXTERNAL_FUNCTIONS_HEADERS }).then(r => r.ok ? r.json() : []),
-  ]).then(([suplData, lidData]) => {
-    const result: IndicadorResultados = {
-      suplentes: (Array.isArray(suplData) ? suplData : []).map((s: any) => ({ id: s.id, nome: s.nome, numero_urna: s.numero_urna, partido: s.partido, regiao: s.regiao_atuacao })),
-      liderancas: (Array.isArray(lidData) ? lidData : []).map((l: any) => ({ id: l.id, nome: l.nome, regiao: l.regiao_atuacao })),
-    };
-    indicadorCacheGlobal = result;
-    indicadorCachePromise = null;
-    return result;
-  }).catch(() => {
-    indicadorCachePromise = null;
-    return createEmptyIndicadorResultados();
-  });
+  usuariosCachePromise = fetch(`${OWN_FUNCTIONS_URL}/listar-usuarios-externos`, {
+    method: "GET",
+    headers: OWN_FUNCTIONS_HEADERS,
+  })
+    .then(r => r.ok ? r.json() : [])
+    .then((data: unknown) => {
+      const result = Array.isArray(data) ? data as UsuarioExterno[] : [];
+      usuariosCacheGlobal = result;
+      usuariosCachePromise = null;
+      return result;
+    })
+    .catch(() => {
+      usuariosCachePromise = null;
+      return [] as UsuarioExterno[];
+    });
 
-  return indicadorCachePromise;
-}
-const SUPABASE_PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID || "hzhxrkurljrogxtzxmmb";
-const OWN_FUNCTIONS_URL = `https://${SUPABASE_PROJECT_ID}.supabase.co/functions/v1`;
-const EXTERNAL_FUNCTIONS_URL = "https://yvdfdmyusdhgtzfguxbj.supabase.co/functions/v1";
-const EXTERNAL_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl2ZGZkbXl1c2RoZ3R6Zmd1eGJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0OTg4MzksImV4cCI6MjA4OTA3NDgzOX0.-xSNbj5kLibkhJoXmOXjfmYPKBB-gqasQgy322Kk-n4";
-const EXTERNAL_FUNCTIONS_HEADERS = {
-  "Content-Type": "application/json",
-  apikey: EXTERNAL_SUPABASE_ANON_KEY,
-  Authorization: `Bearer ${EXTERNAL_SUPABASE_ANON_KEY}`,
-};
-const OWN_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-const OWN_FUNCTIONS_HEADERS = {
-  "Content-Type": "application/json",
-  apikey: OWN_ANON_KEY,
-  Authorization: `Bearer ${OWN_ANON_KEY}`,
-};
-
-function normalizeIndicadorResultados(data: unknown): IndicadorResultados {
-  const payload = data as Partial<IndicadorResultados> | null;
-
-  return {
-    suplentes: Array.isArray(payload?.suplentes) ? payload.suplentes : [],
-    liderancas: Array.isArray(payload?.liderancas) ? payload.liderancas : [],
-  };
-}
-
-function hasIndicadorResultados(resultados: IndicadorResultados) {
-  return resultados.suplentes.length > 0 || resultados.liderancas.length > 0;
-}
-
-function filtrarIndicadoresPorTermo(resultados: IndicadorResultados, termo: string): IndicadorResultados {
-  const termoNormalizado = termo.toLowerCase();
-  const filtrar = (itens: IndicadorResumo[]) =>
-    itens.filter((item) => item.nome?.toLowerCase().includes(termoNormalizado));
-
-  return {
-    suplentes: filtrar(resultados.suplentes),
-    liderancas: filtrar(resultados.liderancas),
-  };
+  return usuariosCachePromise;
 }
 
 const InputField = ({ label, value, onChange, placeholder, type = "text", readonly = false }: {
