@@ -19,6 +19,7 @@ const EditarPessoa = lazy(() => import("./pages/EditarPessoa"));
 const PessoasPage = lazy(() => import("./pages/PessoasPage"));
 const PessoaDetalhePage = lazy(() => import("./pages/PessoaDetalhePage"));
 const ConfigPage = lazy(() => import("./pages/ConfigPage"));
+const DashboardAdmin = lazy(() => import("./pages/DashboardAdmin"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
@@ -45,6 +46,7 @@ function ProtectedRoutes() {
         <Route path="/visita/:id" element={<DetalheVisita />} />
         <Route path="/editar-visita/:id" element={<EditarVisita />} />
         <Route path="/editar-pessoa/:id" element={<EditarPessoa />} />
+        <Route path="/dashboard" element={role === "admin" ? <DashboardAdmin /> : <Navigate to="/" replace />} />
         <Route path="/pessoas" element={role === "admin" ? <PessoasPage /> : <Navigate to="/" replace />} />
         <Route path="/pessoa/:id" element={role === "admin" ? <PessoaDetalhePage /> : <Navigate to="/" replace />} />
         <Route path="/config" element={<ConfigPage />} />
