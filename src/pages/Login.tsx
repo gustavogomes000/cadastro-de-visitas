@@ -293,9 +293,9 @@ export default function Login() {
             <img src={candidataImg} alt="Dra. Fernanda Sarelli" className="w-full h-full object-cover" loading="eager" />
           </div>
           {/* Logo overlapping */}
-          <img src={logoImg} alt="Logo Sarelli" className="h-28 sm:h-36 -mt-4 object-contain" />
+          <img src={logoImg} alt="Logo Sarelli" className="h-28 sm:h-36 -mt-4 -mb-2 object-contain" />
           {/* Subtitle */}
-          <p className="text-xs sm:text-sm font-semibold tracking-widest uppercase -mt-1" style={{ color: "#c8aa64" }}>
+          <p className="text-xs sm:text-sm font-semibold tracking-widest uppercase -mt-2" style={{ color: "#c8aa64" }}>
             {APP_TITLE}
           </p>
         </div>
