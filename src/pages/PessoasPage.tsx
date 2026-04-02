@@ -19,6 +19,7 @@ export default function PessoasPage() {
     const { data } = await supabase
       .from("pessoas")
       .select("*, visitas(id, data_hora)")
+      .neq("ativo", false)
       .order("nome");
     setPessoas(data || []);
     setLoading(false);
