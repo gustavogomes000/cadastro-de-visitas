@@ -492,17 +492,35 @@ export default function NovaVisita() {
         }
       } else {
         const cpfToSave = pessoa.cpf || `TEMP${Date.now()}`;
-        const { data: novaPessoa, error } = await supabase.from("pessoas").insert({
-          cpf: cpfToSave, nome: pessoa.nome, telefone: pessoa.telefone || null, email: pessoa.email || null,
-          whatsapp: pessoa.whatsapp || null, instagram: pessoa.instagram || null,
-          outras_redes: pessoa.outras_redes || null, titulo_eleitor: pessoa.titulo_eleitor || null,
-          zona_eleitoral: pessoa.zona_eleitoral || null, secao_eleitoral: pessoa.secao_eleitoral || null,
-          municipio: pessoa.municipio || null, uf: pessoa.uf || null,
-          data_nascimento: pessoa.data_nascimento || null, situacao_titulo: pessoa.situacao_titulo || null,
-          observacoes_gerais: pessoa.observacoes_gerais || null,
-        }).select("id").single();
-        if (error) throw error;
-        pid = novaPessoa.id;
+        // Check if there's a DESATIVADO person with this CPF — reactivate instead of inserting
+        const { data: desativado } = pessoa.cpf
+          ? await supabase.from("pessoas").select("id").eq("cpf", pessoa.cpf).eq("origem", "DESATIVADO").maybeSingle()
+          : { data: null };
+        if (desativado) {
+          await supabase.from("pessoas").update({
+            nome: pessoa.nome, telefone: pessoa.telefone || null, email: pessoa.email || null,
+            whatsapp: pessoa.whatsapp || null, instagram: pessoa.instagram || null,
+            outras_redes: pessoa.outras_redes || null, titulo_eleitor: pessoa.titulo_eleitor || null,
+            zona_eleitoral: pessoa.zona_eleitoral || null, secao_eleitoral: pessoa.secao_eleitoral || null,
+            municipio: pessoa.municipio || null, uf: pessoa.uf || null,
+            data_nascimento: pessoa.data_nascimento || null, situacao_titulo: pessoa.situacao_titulo || null,
+            observacoes_gerais: pessoa.observacoes_gerais || null, origem: null,
+            atualizado_em: new Date().toISOString(),
+          }).eq("id", desativado.id);
+          pid = desativado.id;
+        } else {
+          const { data: novaPessoa, error } = await supabase.from("pessoas").insert({
+            cpf: cpfToSave, nome: pessoa.nome, telefone: pessoa.telefone || null, email: pessoa.email || null,
+            whatsapp: pessoa.whatsapp || null, instagram: pessoa.instagram || null,
+            outras_redes: pessoa.outras_redes || null, titulo_eleitor: pessoa.titulo_eleitor || null,
+            zona_eleitoral: pessoa.zona_eleitoral || null, secao_eleitoral: pessoa.secao_eleitoral || null,
+            municipio: pessoa.municipio || null, uf: pessoa.uf || null,
+            data_nascimento: pessoa.data_nascimento || null, situacao_titulo: pessoa.situacao_titulo || null,
+            observacoes_gerais: pessoa.observacoes_gerais || null,
+          }).select("id").single();
+          if (error) throw error;
+          pid = novaPessoa.id;
+        }
       }
 
       const visitaPayload: Record<string, any> = {
