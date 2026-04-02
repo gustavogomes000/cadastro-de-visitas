@@ -306,20 +306,13 @@ export default function NovaVisita() {
     if (raw.length > 11) return;
     setPessoa(prev => ({ ...prev, cpf: raw }));
 
-    // Search by partial CPF (at least 3 digits)
+    // Search by partial CPF (at least 3 digits) — busca local
     if (raw.length >= 3 && raw.length < 11) {
-      if (cpfDebounceRef.current) clearTimeout(cpfDebounceRef.current);
-      cpfDebounceRef.current = setTimeout(async () => {
-        const { data } = await supabase
-          .from("pessoas")
-          .select("id, nome, cpf, municipio")
-          .or("origem.is.null,origem.neq.DESATIVADO")
-          .ilike("cpf", `${raw}%`)
-          .order("nome")
-          .limit(5);
-        setCpfSugestoes(data || []);
-        setCpfDropdownAberto((data || []).length > 0);
-      }, 300);
+      const results = pessoasCacheRef.current
+        .filter(p => p.cpf?.startsWith(raw))
+        .slice(0, 5);
+      setCpfSugestoes(results);
+      setCpfDropdownAberto(results.length > 0);
     } else {
       setCpfSugestoes([]);
       setCpfDropdownAberto(false);
