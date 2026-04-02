@@ -343,11 +343,6 @@ export default function DashboardAdmin() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
                       <span className="text-xs font-semibold truncate">{r.nome}</span>
-                      {tag.label && (
-                        <span className={cn("text-[9px] px-1.5 py-0.5 rounded-full font-semibold border flex-shrink-0", tag.className)}>
-                          {tag.label}
-                        </span>
-                      )}
                     </div>
                     <div className="mt-0.5 h-1.5 bg-muted rounded-full overflow-hidden">
                       <div
