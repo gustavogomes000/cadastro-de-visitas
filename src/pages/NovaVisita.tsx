@@ -457,13 +457,15 @@ export default function NovaVisita() {
   };
 
   const handleSave = async () => {
-    if (!pessoa.cpf || pessoa.cpf.length !== 11 || !validateCPF(pessoa.cpf)) {
-      toast({ title: "CPF obrigatório e válido", variant: "destructive" });
-      return;
-    }
-    if (!pessoa.nome && formMode === "full") {
-      toast({ title: "Nome obrigatório", variant: "destructive" });
-      return;
+    if (pessoaStatus !== "found") {
+      if (!pessoa.cpf || pessoa.cpf.length !== 11 || !validateCPF(pessoa.cpf)) {
+        toast({ title: "CPF obrigatório e válido", variant: "destructive" });
+        return;
+      }
+      if (!pessoa.nome) {
+        toast({ title: "Nome obrigatório", variant: "destructive" });
+        return;
+      }
     }
     if (!visita.assunto) {
       toast({ title: "Assunto obrigatório", variant: "destructive" });
