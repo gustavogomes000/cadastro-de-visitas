@@ -6,9 +6,6 @@ import { Search, ChevronRight, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDateTime } from "@/lib/masks";
 
-const SUPABASE_PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID || "hzhxrkurljrogxtzxmmb";
-const OWN_FUNCTIONS_URL = `https://${SUPABASE_PROJECT_ID}.supabase.co/functions/v1`;
-const OWN_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
 interface UsuarioExterno {
   id: string;
