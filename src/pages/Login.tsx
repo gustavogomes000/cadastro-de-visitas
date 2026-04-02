@@ -408,7 +408,7 @@ export default function Login() {
         <div className="text-center space-y-1 pb-4">
           <p className="text-[10px] text-gray-400">Pré-candidata a Deputada Estadual — GO 2026</p>
           <a
-            href="https://drafernandasarelli.com.br"
+            href="https://www.drafernandasarelli.com.br"
             target="_blank"
             rel="noopener noreferrer"
             className="text-[10px] text-pink-400 hover:text-pink-500 transition-colors"
