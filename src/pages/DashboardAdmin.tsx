@@ -297,7 +297,7 @@ export default function DashboardAdmin() {
         <div className="card-section mb-4 animate-fade-in">
           <div className="flex items-center gap-2 mb-3">
             <BarChart3 size={14} className="text-primary" />
-            <p className="text-xs font-bold text-primary uppercase tracking-wide">Cadastros por dia</p>
+            <p className="text-xs font-bold text-primary uppercase tracking-wide">Visitas por dia</p>
           </div>
           <div className="h-[140px] w-full">
             <ResponsiveContainer width="100%" height="100%">
