@@ -207,9 +207,6 @@ export default function EditarVisita() {
         descricao_assunto: descricao || null,
         quem_indicou: quemIndicou || null,
         origem_visita: origemVisita || null,
-        status,
-        responsavel_tratativa: responsavel || null,
-        observacoes: observacoes || null,
         atualizado_em: new Date().toISOString(),
       }).eq("id", id);
       if (error) throw error;
