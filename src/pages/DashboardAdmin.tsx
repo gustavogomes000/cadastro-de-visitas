@@ -1,21 +1,15 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { AppLayout } from "@/components/AppLayout";
 import { Search, ChevronRight, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDateTime } from "@/lib/masks";
-
-
-interface UsuarioExterno {
-  id: string;
-  nome: string;
-  tipo: string;
-  tag: string;
-  subtitulo?: string;
-  municipio?: string;
-  fonte?: string;
-}
+import {
+  fetchAllUsuariosExternos,
+  subscribeToUsuariosExternos,
+  type UsuarioExterno,
+} from "@/lib/indicadoresExternos";
 
 interface VisitaComPessoa {
   id: string;
@@ -55,47 +49,19 @@ export default function DashboardAdmin() {
   const [externos, setExternos] = useState<UsuarioExterno[]>([]);
   const externosMapRef = useRef<Map<string, UsuarioExterno>>(new Map());
 
-  useEffect(() => {
-    fetchVisitas();
-    fetchExternos();
-  }, []);
-
-  async function fetchExternos() {
+  const fetchExternos = useCallback(async (force = false) => {
     try {
-      const [suplRes, lidRes] = await Promise.all([
-        supabase.from("suplentes").select("id, nome, partido, numero_urna, regiao_atuacao"),
-        supabase.from("liderancas").select("id, nome, ligacao_politica, regiao"),
-      ]);
-
-      const result: UsuarioExterno[] = [];
-
-      (suplRes.data || []).forEach((s: any) => {
-        result.push({
-          id: s.id, nome: s.nome, tipo: "suplente", tag: "Suplente",
-          subtitulo: [s.partido, s.regiao_atuacao, s.numero_urna].filter(Boolean).join(" · "),
-          municipio: s.regiao_atuacao || "", fonte: "local",
-        });
-      });
-
-      (lidRes.data || []).forEach((l: any) => {
-        result.push({
-          id: l.id, nome: l.nome, tipo: "lideranca_cadastrada", tag: "Liderança",
-          subtitulo: [l.ligacao_politica, l.regiao].filter(Boolean).join(" · "),
-          municipio: l.regiao || "", fonte: "local",
-        });
-      });
-
-      result.sort((a, b) => (a.nome || "").localeCompare(b.nome || ""));
-      setExternos(result);
+      const data = await fetchAllUsuariosExternos({ force });
+      setExternos(data);
       const map = new Map<string, UsuarioExterno>();
-      result.forEach((u) => map.set((u.nome || "").toLowerCase().trim(), u));
+      data.forEach((u) => map.set((u.nome || "").toLowerCase().trim(), u));
       externosMapRef.current = map;
     } catch (err) {
       console.error("[Dashboard] Erro ao buscar externos:", err);
     }
-  }
+  }, []);
 
-  async function fetchVisitas() {
+  const fetchVisitas = useCallback(async () => {
     setLoading(true);
     const { data } = await supabase
       .from("visitas")
@@ -104,7 +70,37 @@ export default function DashboardAdmin() {
       .limit(500);
     setVisitas((data as any[]) || []);
     setLoading(false);
-  }
+  }, []);
+
+  useEffect(() => {
+    void fetchVisitas();
+    void fetchExternos(true);
+
+    const unsubscribeIndicadores = subscribeToUsuariosExternos(() => {
+      void fetchExternos(true);
+    }, "dashboard-admin");
+
+    const dashboardChannel = supabase
+      .channel("dashboard-admin-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "visitas" }, () => {
+        void fetchVisitas();
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "pessoas" }, () => {
+        void fetchVisitas();
+      })
+      .subscribe();
+
+    const intervalId = window.setInterval(() => {
+      void fetchExternos(true);
+      void fetchVisitas();
+    }, 5000);
+
+    return () => {
+      unsubscribeIndicadores();
+      window.clearInterval(intervalId);
+      void supabase.removeChannel(dashboardChannel);
+    };
+  }, [fetchExternos, fetchVisitas]);
 
   function getIndicadorTipo(quemIndicou: string | null): string | null {
     if (!quemIndicou) return null;

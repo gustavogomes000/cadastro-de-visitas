@@ -8,6 +8,12 @@ import { ASSUNTOS, ORIGENS_VISITA, STATUS_OPTIONS, UF_OPTIONS } from "@/lib/cons
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
+import {
+  fetchAllUsuariosExternos,
+  filterUsuariosExternos,
+  subscribeToUsuariosExternos,
+  type UsuarioExterno,
+} from "@/lib/indicadoresExternos";
 
 function getBrasiliaDateTime() {
   const now = new Date();
@@ -53,16 +59,6 @@ interface DadosVisita {
   observacoes: string;
 }
 
-interface UsuarioExterno {
-  id: string;
-  nome: string;
-  tipo: string;
-  tag: string;
-  subtitulo?: string;
-  municipio?: string;
-  fonte?: string;
-}
-
 function getTagColor(tipo: string): string {
   switch (tipo) {
     case "suplente": return "bg-emerald-500/15 text-emerald-600";
@@ -75,58 +71,6 @@ function getTagColor(tipo: string): string {
     case "eleitor_cadastrado": return "bg-gray-500/15 text-gray-500";
     default: return "bg-muted text-muted-foreground";
   }
-}
-
-// Cache global para evitar re-fetch entre renders
-let usuariosCacheGlobal: UsuarioExterno[] | null = null;
-let usuariosCachePromise: Promise<UsuarioExterno[]> | null = null;
-
-async function fetchAllUsuariosExternos(): Promise<UsuarioExterno[]> {
-  if (usuariosCacheGlobal) return usuariosCacheGlobal;
-  if (usuariosCachePromise) return usuariosCachePromise;
-
-  usuariosCachePromise = (async () => {
-    const [suplRes, lidRes] = await Promise.all([
-      supabase.from("suplentes").select("id, nome, partido, numero_urna, cargo_disputado, telefone, municipio_id, situacao, regiao_atuacao"),
-      supabase.from("liderancas").select("id, nome, whatsapp, cpf, regiao, municipio_id, ligacao_politica"),
-    ]);
-
-    const result: UsuarioExterno[] = [];
-
-    (suplRes.data || []).forEach((s: any) => {
-      result.push({
-        id: s.id,
-        nome: s.nome,
-        tipo: "suplente",
-        tag: "Suplente",
-        subtitulo: [s.partido, s.regiao_atuacao, s.numero_urna].filter(Boolean).join(" · "),
-        municipio: s.regiao_atuacao || "",
-        fonte: "local",
-      });
-    });
-
-    (lidRes.data || []).forEach((l: any) => {
-      result.push({
-        id: l.id,
-        nome: l.nome,
-        tipo: "lideranca_cadastrada",
-        tag: "Liderança",
-        subtitulo: [l.ligacao_politica, l.regiao].filter(Boolean).join(" · "),
-        municipio: l.regiao || "",
-        fonte: "local",
-      });
-    });
-
-    result.sort((a, b) => (a.nome || "").localeCompare(b.nome || ""));
-    usuariosCacheGlobal = result;
-    return result;
-  })().catch((err) => {
-    console.error("[fetchUsuarios] Erro:", err);
-    usuariosCachePromise = null;
-    return [] as UsuarioExterno[];
-  });
-
-  return usuariosCachePromise;
 }
 
 const InputField = ({ label, value, onChange, placeholder, type = "text", readonly = false }: {
@@ -217,13 +161,43 @@ export default function NovaVisita() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  // Preload usuarios on mount
   const allUsuariosRef = useRef<UsuarioExterno[]>([]);
-  useEffect(() => {
-    fetchAllUsuariosExternos()
-      .then(data => { allUsuariosRef.current = data; })
-      .catch(err => console.error("[NovaVisita] Erro ao carregar usuarios:", err));
+  const indicadorBuscaRef = useRef("");
+
+  const refreshUsuariosExternos = useCallback(async (force = false) => {
+    try {
+      const data = await fetchAllUsuariosExternos({ force });
+      allUsuariosRef.current = data;
+
+      const termoAtual = indicadorBuscaRef.current.trim();
+      if (termoAtual.length >= 2) {
+        const filtrados = filterUsuariosExternos(data, termoAtual);
+        setIndicadorResultados(filtrados);
+        setIndicadorDropdownAberto((aberto) => aberto && filtrados.length > 0);
+      }
+    } catch (err) {
+      console.error("[NovaVisita] Erro ao carregar usuarios:", err);
+    } finally {
+      setIndicadorBuscando(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void refreshUsuariosExternos(true);
+
+    const unsubscribe = subscribeToUsuariosExternos(() => {
+      void refreshUsuariosExternos(true);
+    }, "nova-visita");
+
+    const intervalId = window.setInterval(() => {
+      void refreshUsuariosExternos(true);
+    }, 5000);
+
+    return () => {
+      unsubscribe();
+      window.clearInterval(intervalId);
+    };
+  }, [refreshUsuariosExternos]);
 
   useEffect(() => {
     return () => {
@@ -391,6 +365,7 @@ export default function NovaVisita() {
     setExistingPessoaId(null);
     setPessoa({ ...EMPTY_PESSOA });
     setVisitHistory([]);
+    indicadorBuscaRef.current = "";
     setIndicadorBusca("");
     setIndicadorSelecionado(null);
     setIndicadorResultados([]);
@@ -407,8 +382,9 @@ export default function NovaVisita() {
 
   // ── Indicador search ──
   const handleIndicadorInput = (valor: string) => {
-    const termo = valor.trim().toLowerCase();
+    const termo = valor.trim();
 
+    indicadorBuscaRef.current = valor;
     setIndicadorBusca(valor);
     setIndicadorSelecionado(null);
     setVisita(prev => ({ ...prev, quem_indicou: valor, indicador_tipo: null, indicador_id: null, indicador_nome: null }));
@@ -420,29 +396,24 @@ export default function NovaVisita() {
       return;
     }
 
-    const all = allUsuariosRef.current;
-    if (all.length > 0) {
-      const filtered = all.filter(u => u.nome?.toLowerCase().includes(termo));
-      setIndicadorResultados(filtered);
-      setIndicadorDropdownAberto(filtered.length > 0);
-      setIndicadorBuscando(false);
+    const filtrados = filterUsuariosExternos(allUsuariosRef.current, termo);
+    setIndicadorResultados(filtrados);
+    setIndicadorDropdownAberto(true);
+
+    if (allUsuariosRef.current.length === 0 || filtrados.length === 0) {
+      setIndicadorBuscando(true);
+      void refreshUsuariosExternos(true);
       return;
     }
 
-    setIndicadorBuscando(true);
-    fetchAllUsuariosExternos().then(data => {
-      allUsuariosRef.current = data;
-      const filtered = data.filter(u => u.nome?.toLowerCase().includes(termo));
-      setIndicadorResultados(filtered);
-      setIndicadorDropdownAberto(filtered.length > 0);
-      setIndicadorBuscando(false);
-    });
+    setIndicadorBuscando(false);
   };
 
   const selecionarIndicador = (item: UsuarioExterno) => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     setIndicadorBuscando(false);
     setIndicadorSelecionado(item);
+    indicadorBuscaRef.current = item.nome;
     setIndicadorBusca(item.nome);
     setIndicadorDropdownAberto(false);
     setVisita(prev => ({ ...prev, quem_indicou: item.nome, indicador_tipo: item.tipo, indicador_id: item.id, indicador_nome: item.nome }));
@@ -452,6 +423,7 @@ export default function NovaVisita() {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     setIndicadorBuscando(false);
     setIndicadorSelecionado(null);
+    indicadorBuscaRef.current = "";
     setIndicadorBusca("");
     setVisita(prev => ({ ...prev, quem_indicou: "", indicador_tipo: null, indicador_id: null, indicador_nome: null }));
     setIndicadorResultados([]);
@@ -713,7 +685,7 @@ export default function NovaVisita() {
               <InputField label="Data e hora" value={visita.data_hora} onChange={(v) => setVisita({ ...visita, data_hora: v })} type="datetime-local" />
               <InputField label="Assunto *" value={visita.assunto} onChange={(v) => setVisita({ ...visita, assunto: v })} placeholder="Descreva o motivo da visita" />
 
-              {/* Quem indicou — busca via Edge Function */}
+              {/* Quem indicou — busca em tempo real */}
               <div className="space-y-1.5 relative" ref={indicadorContainerRef}>
                 <label className="text-xs font-bold text-foreground">Vinculado a (Suplente / Liderança)</label>
                 <div className="relative">
@@ -721,7 +693,12 @@ export default function NovaVisita() {
                   <input
                     value={indicadorBusca}
                     onChange={(e) => handleIndicadorInput(e.target.value)}
-                    onFocus={() => indicadorResultados.length > 0 && setIndicadorDropdownAberto(true)}
+                    onFocus={() => {
+                      if (indicadorBusca.trim().length >= 2 || indicadorResultados.length > 0) {
+                        setIndicadorDropdownAberto(true);
+                      }
+                      void refreshUsuariosExternos(true);
+                    }}
                     placeholder="Buscar por nome..."
                     className="w-full h-12 rounded-lg bg-background border border-border pl-9 pr-10 text-sm outline-none focus:ring-2 focus:ring-primary/30 transition-shadow placeholder:text-muted-foreground/50"
                   />
