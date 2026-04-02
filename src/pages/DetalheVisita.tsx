@@ -66,7 +66,7 @@ export default function DetalheVisita() {
       return;
     }
     toast({ title: "Visita excluída" });
-    navigate("/");
+    navigate(-1);
   };
 
   if (loading) {
