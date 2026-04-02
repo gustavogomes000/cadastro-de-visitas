@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 export default function PessoaDetalhePage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [pessoa, setPessoa] = useState<any>(null);
   const [visitas, setVisitas] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
