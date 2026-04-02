@@ -103,11 +103,11 @@ async function fetchAllUsuariosExternos(): Promise<UsuarioExterno[]> {
   if (usuariosCachePromise) return usuariosCachePromise;
 
   usuariosCachePromise = (async () => {
-    // Tentar endpoint unificado primeiro
+    // Tentar endpoint unificado via proxy próprio
     try {
-      const r = await fetch(`${EXTERNAL_FUNCTIONS_URL}/listar-usuarios-externos`, {
+      const r = await fetch(`${OWN_FUNCTIONS_URL}/listar-usuarios-externos`, {
         method: "GET",
-        headers: EXTERNAL_FUNCTIONS_HEADERS,
+        headers: OWN_FUNCTIONS_HEADERS,
       });
       if (r.ok) {
         const data = await r.json();
@@ -528,9 +528,9 @@ export default function NovaVisita() {
           titulo_eleitor: pessoa.titulo_eleitor || null,
           regiao_atuacao: pessoa.municipio || null,
         };
-        fetch(`${EXTERNAL_FUNCTIONS_URL}/receber-cadastro-externo`, {
+      fetch(`${OWN_FUNCTIONS_URL}/receber-cadastro-externo`, {
           method: "POST",
-          headers: EXTERNAL_FUNCTIONS_HEADERS,
+          headers: OWN_FUNCTIONS_HEADERS,
           body: JSON.stringify(cadastroPayload),
         }).then(r => r.json()).then(data => {
           if (data.sucesso) {
