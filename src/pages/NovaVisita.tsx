@@ -476,24 +476,34 @@ export default function NovaVisita() {
         }
       }
 
-      // Sincronização fire-and-forget com sistema principal
+      // Sincronização fire-and-forget com sistema principal via receber-cadastro-externo
       if (visita.tipo_visitante && visita.indicador_tipo && visita.indicador_id) {
-        fetch(`${EXTERNAL_FUNCTIONS_URL}/sincronizar-visitante`, {
+        const cadastroPayload: Record<string, any> = {
+          indicador_id: visita.indicador_id,
+          indicador_tipo: visita.indicador_tipo,
+          indicador_nome: visita.indicador_nome || visita.quem_indicou,
+          tipo: visita.tipo_visitante,
+          nome: pessoa.nome,
+          cpf: pessoa.cpf || null,
+          whatsapp: pessoa.whatsapp || null,
+          telefone: pessoa.telefone || null,
+          email: pessoa.email || null,
+          zona_eleitoral: pessoa.zona_eleitoral || null,
+          secao_eleitoral: pessoa.secao_eleitoral || null,
+          colegio_eleitoral: (pessoa as any).colegio_eleitoral || null,
+          municipio_eleitoral: pessoa.municipio || null,
+          titulo_eleitor: pessoa.titulo_eleitor || null,
+          regiao_atuacao: pessoa.municipio || null,
+        };
+        fetch(`${OWN_FUNCTIONS_URL}/receber-cadastro-externo`, {
           method: "POST",
-          headers: EXTERNAL_FUNCTIONS_HEADERS,
-          body: JSON.stringify({
-            tipo: visita.tipo_visitante,
-            nome: pessoa.nome,
-            cpf: pessoa.cpf || null,
-            whatsapp: pessoa.whatsapp || null,
-            indicador_tipo: visita.indicador_tipo,
-            indicador_id: visita.indicador_id,
-          }),
+          headers: OWN_FUNCTIONS_HEADERS,
+          body: JSON.stringify(cadastroPayload),
         }).then(r => r.json()).then(data => {
-          if (data.acao === "criado") {
-            toast({ title: "🔗 Sincronizado!", description: `${pessoa.nome} cadastrado(a) no sistema de campanha.` });
-          } else if (data.acao === "ja_existe") {
-            toast({ title: "ℹ️ Já cadastrado", description: `${pessoa.nome} já existe no sistema principal.` });
+          if (data.sucesso) {
+            toast({ title: "🔗 Sincronizado!", description: `${pessoa.nome} cadastrado(a) no sistema principal.` });
+          } else if (data.aviso) {
+            toast({ title: "ℹ️ Aviso", description: data.aviso });
           }
         }).catch(err => {
           console.error("Erro na sincronização:", err);
