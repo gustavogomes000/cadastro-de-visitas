@@ -527,12 +527,13 @@ export default function NovaVisita() {
       }
 
       // Sincronização fire-and-forget com sistema principal via receber-cadastro-externo
-      if (visita.tipo_visitante && visita.indicador_tipo && visita.indicador_id) {
+      // Envia sempre que tiver pelo menos o nome da pessoa
+      if (pessoa.nome) {
         const cadastroPayload: Record<string, any> = {
-          indicador_id: visita.indicador_id,
-          indicador_tipo: visita.indicador_tipo,
-          indicador_nome: visita.indicador_nome || visita.quem_indicou,
-          tipo: visita.tipo_visitante,
+          indicador_id: visita.indicador_id || null,
+          indicador_tipo: visita.indicador_tipo || null,
+          indicador_nome: visita.indicador_nome || visita.quem_indicou || null,
+          tipo: visita.tipo_visitante || null,
           nome: pessoa.nome,
           cpf: pessoa.cpf || null,
           whatsapp: pessoa.whatsapp || null,
