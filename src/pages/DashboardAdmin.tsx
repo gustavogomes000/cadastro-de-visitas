@@ -210,7 +210,25 @@ export default function DashboardAdmin() {
       .slice(0, 5);
   }, [visitasFiltradas, externos]);
 
-  // Chart data — cadastros por dia (últimos N dias baseado no período)
+  // Ranking de visitantes (pessoas com mais visitas)
+  const rankingVisitantes = useMemo(() => {
+    const counts = new Map<string, { nome: string; id: string; count: number }>();
+    visitasFiltradas.forEach((v) => {
+      if (!v.pessoas?.id || !v.pessoas?.nome) return;
+      const key = v.pessoas.id;
+      const existing = counts.get(key);
+      if (existing) {
+        existing.count++;
+      } else {
+        counts.set(key, { nome: v.pessoas.nome, id: v.pessoas.id, count: 1 });
+      }
+    });
+    return Array.from(counts.values())
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+  }, [visitasFiltradas]);
+
+
   const chartData = useMemo(() => {
     const days = periodo === "hoje" ? 1 : periodo === "7dias" ? 7 : periodo === "30dias" ? 30 : 14;
     const now = new Date();
