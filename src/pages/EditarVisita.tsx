@@ -133,9 +133,6 @@ export default function EditarVisita() {
           setDescricao(data.descricao_assunto || "");
           setQuemIndicou(data.quem_indicou || "");
           setOrigemVisita(data.origem_visita || "");
-          setStatus(data.status || "Aguardando");
-          setResponsavel(data.responsavel_tratativa || "");
-          setObservacoes(data.observacoes || "");
           setNomePessoa(data.pessoas?.nome || "Visitante");
           // Set initial indicador search text
           if (data.quem_indicou) {
