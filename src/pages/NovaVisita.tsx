@@ -424,8 +424,8 @@ export default function NovaVisita() {
 
   const handleSave = async () => {
     if (pessoaStatus !== "found") {
-      if (pessoa.cpf && pessoa.cpf.length > 0 && (pessoa.cpf.length !== 11 || !validateCPF(pessoa.cpf))) {
-        toast({ title: "CPF inválido", variant: "destructive" });
+      if (!pessoa.cpf || pessoa.cpf.length !== 11 || !validateCPF(pessoa.cpf)) {
+        toast({ title: "CPF obrigatório e válido", variant: "destructive" });
         return;
       }
       if (!pessoa.nome) {
