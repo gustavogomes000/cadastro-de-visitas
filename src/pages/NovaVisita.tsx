@@ -172,6 +172,9 @@ export default function NovaVisita() {
       if (nomeContainerRef.current && !nomeContainerRef.current.contains(e.target as Node)) {
         setNomeDropdownAberto(false);
       }
+      if (cpfContainerRef.current && !cpfContainerRef.current.contains(e.target as Node)) {
+        setCpfDropdownAberto(false);
+      }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
