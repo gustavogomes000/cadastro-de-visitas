@@ -81,37 +81,45 @@ function getTagColor(tipo: string): string {
 let usuariosCacheGlobal: UsuarioExterno[] | null = null;
 let usuariosCachePromise: Promise<UsuarioExterno[]> | null = null;
 
-const SUPABASE_PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID || "hzhxrkurljrogxtzxmmb";
-const OWN_FUNCTIONS_URL = `https://${SUPABASE_PROJECT_ID}.supabase.co/functions/v1`;
-const OWN_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-
-async function getAuthHeaders(): Promise<Record<string, string>> {
-  const { data } = await supabase.auth.getSession();
-  const token = data?.session?.access_token || OWN_ANON_KEY;
-  return {
-    "Content-Type": "application/json",
-    apikey: OWN_ANON_KEY,
-    Authorization: `Bearer ${token}`,
-  };
-}
-
 async function fetchAllUsuariosExternos(): Promise<UsuarioExterno[]> {
   if (usuariosCacheGlobal) return usuariosCacheGlobal;
   if (usuariosCachePromise) return usuariosCachePromise;
 
   usuariosCachePromise = (async () => {
-    const headers = await getAuthHeaders();
-    const r = await fetch(`${OWN_FUNCTIONS_URL}/listar-usuarios-externos`, {
-      method: "GET",
-      headers,
+    const [suplRes, lidRes] = await Promise.all([
+      supabase.from("suplentes").select("id, nome, partido, numero_urna, cargo_disputado, telefone, municipio_id, situacao, regiao_atuacao"),
+      supabase.from("liderancas").select("id, nome, whatsapp, cpf, regiao, municipio_id, ligacao_politica"),
+    ]);
+
+    const result: UsuarioExterno[] = [];
+
+    (suplRes.data || []).forEach((s: any) => {
+      result.push({
+        id: s.id,
+        nome: s.nome,
+        tipo: "suplente",
+        tag: "Suplente",
+        subtitulo: [s.partido, s.regiao_atuacao, s.numero_urna].filter(Boolean).join(" · "),
+        municipio: s.regiao_atuacao || "",
+        fonte: "local",
+      });
     });
-    if (!r.ok) throw new Error(`Status ${r.status}`);
-    const data = await r.json();
-    if (Array.isArray(data)) {
-      usuariosCacheGlobal = data as UsuarioExterno[];
-      return usuariosCacheGlobal;
-    }
-    return [] as UsuarioExterno[];
+
+    (lidRes.data || []).forEach((l: any) => {
+      result.push({
+        id: l.id,
+        nome: l.nome,
+        tipo: "lideranca_cadastrada",
+        tag: "Liderança",
+        subtitulo: [l.ligacao_politica, l.regiao].filter(Boolean).join(" · "),
+        municipio: l.regiao || "",
+        fonte: "local",
+      });
+    });
+
+    result.sort((a, b) => (a.nome || "").localeCompare(b.nome || ""));
+    usuariosCacheGlobal = result;
+    return result;
   })().catch((err) => {
     console.error("[fetchUsuarios] Erro:", err);
     usuariosCachePromise = null;

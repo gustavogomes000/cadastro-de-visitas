@@ -62,25 +62,34 @@ export default function DashboardAdmin() {
 
   async function fetchExternos() {
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData?.session?.access_token || OWN_ANON_KEY;
-      const r = await fetch(`${OWN_FUNCTIONS_URL}/listar-usuarios-externos`, {
-        headers: {
-          "Content-Type": "application/json",
-          apikey: OWN_ANON_KEY,
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      if (!r.ok) return;
-      const data = await r.json();
-      if (Array.isArray(data)) {
-        setExternos(data);
-        const map = new Map<string, UsuarioExterno>();
-        data.forEach((u: UsuarioExterno) => {
-          map.set((u.nome || "").toLowerCase().trim(), u);
+      const [suplRes, lidRes] = await Promise.all([
+        supabase.from("suplentes").select("id, nome, partido, numero_urna, regiao_atuacao"),
+        supabase.from("liderancas").select("id, nome, ligacao_politica, regiao"),
+      ]);
+
+      const result: UsuarioExterno[] = [];
+
+      (suplRes.data || []).forEach((s: any) => {
+        result.push({
+          id: s.id, nome: s.nome, tipo: "suplente", tag: "Suplente",
+          subtitulo: [s.partido, s.regiao_atuacao, s.numero_urna].filter(Boolean).join(" · "),
+          municipio: s.regiao_atuacao || "", fonte: "local",
         });
-        externosMapRef.current = map;
-      }
+      });
+
+      (lidRes.data || []).forEach((l: any) => {
+        result.push({
+          id: l.id, nome: l.nome, tipo: "lideranca_cadastrada", tag: "Liderança",
+          subtitulo: [l.ligacao_politica, l.regiao].filter(Boolean).join(" · "),
+          municipio: l.regiao || "", fonte: "local",
+        });
+      });
+
+      result.sort((a, b) => (a.nome || "").localeCompare(b.nome || ""));
+      setExternos(result);
+      const map = new Map<string, UsuarioExterno>();
+      result.forEach((u) => map.set((u.nome || "").toLowerCase().trim(), u));
+      externosMapRef.current = map;
     } catch (err) {
       console.error("[Dashboard] Erro ao buscar externos:", err);
     }
