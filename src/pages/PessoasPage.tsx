@@ -19,9 +19,9 @@ export default function PessoasPage() {
     const { data } = await supabase
       .from("pessoas")
       .select("*, visitas(id, data_hora)")
-      .or("ativo.is.null,ativo.eq.true")
       .order("nome");
-    setPessoas(data || []);
+    // Filtra no cliente: esconde apenas pessoas explicitamente desativadas
+    setPessoas((data || []).filter((p: any) => p.ativo !== false));
     setLoading(false);
   }
 
