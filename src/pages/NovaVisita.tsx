@@ -731,27 +731,21 @@ export default function NovaVisita() {
                     <Loader2 size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground animate-spin" />
                   )}
                 </div>
-                {nomeDropdownAberto && pessoa.nome.trim().length >= 2 && (
+                {nomeDropdownAberto && nomeSugestoes.length > 0 && pessoa.nome.trim().length >= 2 && (
                   <div className="absolute z-50 w-full mt-1 bg-card border border-border rounded-xl shadow-lg max-h-[280px] overflow-y-auto">
-                    {nomeSugestoes.length > 0 ? (
-                      nomeSugestoes.map((p) => (
-                        <button key={p.id} type="button" onClick={() => { setNomeDropdownAberto(false); navigate(`/nova-visita-existente/${p.id}`); }}
-                          className="w-full text-left px-3 py-2.5 hover:bg-muted flex items-center justify-between transition-colors cursor-pointer border-b border-border/30 last:border-0">
-                          <div>
-                            <span className="text-sm font-semibold">{p.nome}</span>
-                            {p.whatsapp && <p className="text-xs text-muted-foreground">WhatsApp: {p.whatsapp}</p>}
-                            {p.municipio && <p className="text-xs text-muted-foreground">{p.municipio}{p.uf ? ` - ${p.uf}` : ""}</p>}
-                          </div>
-                          <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-emerald-500/15 text-emerald-600 flex-shrink-0">
-                            Registrar visita
-                          </span>
-                        </button>
-                      ))
-                    ) : !nomeBuscando ? (
-                      <div className="px-3 py-3 text-center text-xs text-muted-foreground">
-                        Nenhum cadastro encontrado para "<span className="font-semibold">{pessoa.nome.trim()}</span>"
-                      </div>
-                    ) : null}
+                    {nomeSugestoes.map((p) => (
+                      <button key={p.id} type="button" onClick={() => { setNomeDropdownAberto(false); navigate(`/nova-visita-existente/${p.id}`); }}
+                        className="w-full text-left px-3 py-2.5 hover:bg-muted flex items-center justify-between transition-colors cursor-pointer border-b border-border/30 last:border-0">
+                        <div>
+                          <span className="text-sm font-semibold">{p.nome}</span>
+                          {p.whatsapp && <p className="text-xs text-muted-foreground">WhatsApp: {p.whatsapp}</p>}
+                          {p.municipio && <p className="text-xs text-muted-foreground">{p.municipio}{p.uf ? ` - ${p.uf}` : ""}</p>}
+                        </div>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-emerald-500/15 text-emerald-600 flex-shrink-0">
+                          Registrar visita
+                        </span>
+                      </button>
+                    ))}
                   </div>
                 )}
               </div>
