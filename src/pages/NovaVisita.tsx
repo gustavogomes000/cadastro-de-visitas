@@ -157,16 +157,42 @@ export default function NovaVisita() {
     responsavel_tratativa: "", observacoes: "",
   });
 
-  // Close indicador dropdown on outside click
+  // Close dropdowns on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (indicadorContainerRef.current && !indicadorContainerRef.current.contains(e.target as Node)) {
         setIndicadorDropdownAberto(false);
       }
+      if (nomeContainerRef.current && !nomeContainerRef.current.contains(e.target as Node)) {
+        setNomeDropdownAberto(false);
+      }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
+
+  // Nome autocomplete search
+  const handleNomeInput = (value: string) => {
+    setPessoa(prev => ({ ...prev, nome: value }));
+    const termo = value.trim();
+    if (termo.length < 2) {
+      setNomeSugestoes([]);
+      setNomeDropdownAberto(false);
+      return;
+    }
+    if (nomeDebounceRef.current) clearTimeout(nomeDebounceRef.current);
+    setNomeBuscando(true);
+    nomeDebounceRef.current = setTimeout(async () => {
+      const { data } = await supabase
+        .from("pessoas")
+        .select("id, nome, municipio, uf")
+        .ilike("nome", `%${termo}%`)
+        .limit(8);
+      setNomeSugestoes(data || []);
+      setNomeDropdownAberto((data || []).length > 0);
+      setNomeBuscando(false);
+    }, 300);
+  };
 
   const allUsuariosRef = useRef<UsuarioExterno[]>([]);
   const indicadorBuscaRef = useRef("");
