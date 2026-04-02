@@ -16,63 +16,118 @@ function ConstellationBg() {
     let mouse = { x: -9999, y: -9999 };
 
     const resize = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = window.innerWidth * dpr;
+      canvas.height = window.innerHeight * dpr;
+      canvas.style.width = window.innerWidth + "px";
+      canvas.style.height = window.innerHeight + "px";
+      ctx.scale(dpr, dpr);
     };
     resize();
     window.addEventListener("resize", resize);
 
-    const handleMouse = (e: MouseEvent) => { mouse.x = e.clientX; mouse.y = e.clientY; };
-    const handleMouseLeave = () => { mouse.x = -9999; mouse.y = -9999; };
-    window.addEventListener("mousemove", handleMouse);
-    window.addEventListener("mouseleave", handleMouseLeave);
+    const w = () => canvas.width / (window.devicePixelRatio || 1);
+    const h = () => canvas.height / (window.devicePixelRatio || 1);
 
-    interface Node { x: number; y: number; vx: number; vy: number; radius: number; pulseOffset: number }
-    const count = Math.min(120, Math.floor((canvas.width * canvas.height) / 8000));
+    const handleMouse = (e: MouseEvent) => { mouse.x = e.clientX; mouse.y = e.clientY; };
+    const handleTouch = (e: TouchEvent) => { mouse.x = e.touches[0].clientX; mouse.y = e.touches[0].clientY; };
+    const handleLeave = () => { mouse.x = -9999; mouse.y = -9999; };
+    window.addEventListener("mousemove", handleMouse);
+    window.addEventListener("touchmove", handleTouch, { passive: true });
+    window.addEventListener("mouseleave", handleLeave);
+    window.addEventListener("touchend", handleLeave);
+
+    interface Node {
+      x: number; y: number; vx: number; vy: number;
+      radius: number; pulseOffset: number; layer: number;
+    }
+
+    const count = Math.min(160, Math.floor((w() * h()) / 5500));
     const nodes: Node[] = Array.from({ length: count }, () => ({
-      x: Math.random() * canvas.width,
-      y: Math.random() * canvas.height,
-      vx: (Math.random() - 0.5) * 0.3,
-      vy: (Math.random() - 0.5) * 0.3,
-      radius: Math.random() * 1.5 + 1,
+      x: Math.random() * w(),
+      y: Math.random() * h(),
+      vx: (Math.random() - 0.5) * 0.25,
+      vy: (Math.random() - 0.5) * 0.25,
+      radius: Math.random() * 1.8 + 0.8,
       pulseOffset: Math.random() * Math.PI * 2,
+      layer: Math.random(), // 0=back, 1=front for parallax
     }));
 
-    const maxDist = 180;
-    const mouseRadius = 200;
+    // Data packets traveling along edges
+    interface Packet { from: number; to: number; t: number; speed: number }
+    const packets: Packet[] = [];
+    const spawnPacket = () => {
+      const from = Math.floor(Math.random() * nodes.length);
+      let to = Math.floor(Math.random() * nodes.length);
+      if (to === from) to = (to + 1) % nodes.length;
+      packets.push({ from, to, t: 0, speed: 0.005 + Math.random() * 0.01 });
+    };
+    for (let i = 0; i < 15; i++) spawnPacket();
+
+    const maxDist = 160;
+    const mouseRadius = 220;
     let time = 0;
 
     const draw = () => {
-      time += 0.01;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      time += 0.008;
+      const W = w(), H = h();
+      ctx.clearRect(0, 0, W, H);
 
-      // gradient bg
-      const g = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+      // gradient bg with subtle animated shift
+      const gAngle = Math.sin(time * 0.3) * 0.1;
+      const g = ctx.createLinearGradient(
+        W * (0.3 + gAngle), 0, W * (0.7 - gAngle), H
+      );
       g.addColorStop(0, "#fef2f2");
-      g.addColorStop(0.5, "#fdf2f8");
-      g.addColorStop(1, "#fce7f3");
+      g.addColorStop(0.4, "#fdf2f8");
+      g.addColorStop(0.7, "#fce7f3");
+      g.addColorStop(1, "#fef2f2");
       ctx.fillStyle = g;
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillRect(0, 0, W, H);
 
-      // move nodes
+      // subtle hexagonal grid pattern in background
+      ctx.globalAlpha = 0.03;
+      ctx.strokeStyle = "#ec4899";
+      ctx.lineWidth = 0.5;
+      const hexSize = 60;
+      for (let row = -1; row < H / (hexSize * 0.86) + 1; row++) {
+        for (let col = -1; col < W / hexSize + 1; col++) {
+          const cx = col * hexSize * 1.5 + (row % 2 ? hexSize * 0.75 : 0);
+          const cy = row * hexSize * 0.866;
+          ctx.beginPath();
+          for (let s = 0; s < 6; s++) {
+            const angle = (Math.PI / 3) * s + Math.PI / 6;
+            const px = cx + Math.cos(angle) * hexSize * 0.4;
+            const py = cy + Math.sin(angle) * hexSize * 0.4;
+            s === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+          }
+          ctx.closePath();
+          ctx.stroke();
+        }
+      }
+      ctx.globalAlpha = 1;
+
+      // move nodes with slight wave
       for (const n of nodes) {
-        n.x += n.vx;
-        n.y += n.vy;
-        if (n.x < 0 || n.x > canvas.width) n.vx *= -1;
-        if (n.y < 0 || n.y > canvas.height) n.vy *= -1;
+        n.x += n.vx + Math.sin(time + n.pulseOffset) * 0.03;
+        n.y += n.vy + Math.cos(time * 0.7 + n.pulseOffset) * 0.03;
+        if (n.x < -10) n.x = W + 10;
+        if (n.x > W + 10) n.x = -10;
+        if (n.y < -10) n.y = H + 10;
+        if (n.y > H + 10) n.y = -10;
 
-        // mouse repulsion
-        const mdx = n.x - mouse.x;
-        const mdy = n.y - mouse.y;
+        // mouse attraction (gentle pull instead of repulsion)
+        const mdx = mouse.x - n.x;
+        const mdy = mouse.y - n.y;
         const mDist = Math.sqrt(mdx * mdx + mdy * mdy);
-        if (mDist < mouseRadius && mDist > 0) {
-          const force = (1 - mDist / mouseRadius) * 0.8;
+        if (mDist < mouseRadius && mDist > 30) {
+          const force = (1 - mDist / mouseRadius) * 0.15;
           n.x += (mdx / mDist) * force;
           n.y += (mdy / mDist) * force;
         }
       }
 
-      // connections - draw lines between nearby nodes
+      // connections with animated dash for "data flow" feel
       for (let i = 0; i < nodes.length; i++) {
         for (let j = i + 1; j < nodes.length; j++) {
           const dx = nodes[i].x - nodes[j].x;
@@ -80,12 +135,9 @@ function ConstellationBg() {
           const dist = Math.sqrt(dx * dx + dy * dy);
           if (dist < maxDist) {
             const alpha = (1 - dist / maxDist);
-            const gradient = ctx.createLinearGradient(nodes[i].x, nodes[i].y, nodes[j].x, nodes[j].y);
-            gradient.addColorStop(0, `rgba(236,72,153,${0.2 * alpha})`);
-            gradient.addColorStop(0.5, `rgba(244,114,182,${0.15 * alpha})`);
-            gradient.addColorStop(1, `rgba(236,72,153,${0.2 * alpha})`);
-            ctx.strokeStyle = gradient;
-            ctx.lineWidth = alpha * 1.2;
+            const wave = Math.sin(time * 3 + i * 0.5 + j * 0.3) * 0.5 + 0.5;
+            ctx.strokeStyle = `rgba(236,72,153,${(0.08 + wave * 0.12) * alpha})`;
+            ctx.lineWidth = alpha * 1.0 + wave * 0.3;
             ctx.beginPath();
             ctx.moveTo(nodes[i].x, nodes[i].y);
             ctx.lineTo(nodes[j].x, nodes[j].y);
@@ -94,40 +146,92 @@ function ConstellationBg() {
         }
       }
 
-      // mouse connections - lines from mouse to nearby nodes
-      for (const n of nodes) {
-        const dx = n.x - mouse.x;
-        const dy = n.y - mouse.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist < mouseRadius) {
-          const alpha = (1 - dist / mouseRadius) * 0.4;
-          ctx.strokeStyle = `rgba(236,72,153,${alpha})`;
-          ctx.lineWidth = 0.8;
-          ctx.beginPath();
-          ctx.moveTo(mouse.x, mouse.y);
-          ctx.lineTo(n.x, n.y);
-          ctx.stroke();
+      // mouse connection web
+      if (mouse.x > -9000) {
+        // glow around cursor
+        const mg = ctx.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, mouseRadius * 0.6);
+        mg.addColorStop(0, "rgba(236,72,153,0.04)");
+        mg.addColorStop(1, "rgba(236,72,153,0)");
+        ctx.fillStyle = mg;
+        ctx.beginPath();
+        ctx.arc(mouse.x, mouse.y, mouseRadius * 0.6, 0, Math.PI * 2);
+        ctx.fill();
+
+        for (const n of nodes) {
+          const dx = n.x - mouse.x;
+          const dy = n.y - mouse.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < mouseRadius) {
+            const alpha = (1 - dist / mouseRadius) * 0.35;
+            ctx.strokeStyle = `rgba(244,114,182,${alpha})`;
+            ctx.lineWidth = 0.6;
+            ctx.beginPath();
+            ctx.moveTo(mouse.x, mouse.y);
+            ctx.lineTo(n.x, n.y);
+            ctx.stroke();
+          }
         }
       }
 
-      // draw nodes with pulse
+      // animate data packets
+      for (let p = packets.length - 1; p >= 0; p--) {
+        const pkt = packets[p];
+        pkt.t += pkt.speed;
+        if (pkt.t >= 1) {
+          packets.splice(p, 1);
+          spawnPacket();
+          continue;
+        }
+        const a = nodes[pkt.from], b = nodes[pkt.to];
+        const px = a.x + (b.x - a.x) * pkt.t;
+        const py = a.y + (b.y - a.y) * pkt.t;
+
+        const pg = ctx.createRadialGradient(px, py, 0, px, py, 5);
+        pg.addColorStop(0, "rgba(236,72,153,0.6)");
+        pg.addColorStop(0.5, "rgba(244,114,182,0.2)");
+        pg.addColorStop(1, "rgba(236,72,153,0)");
+        ctx.fillStyle = pg;
+        ctx.beginPath();
+        ctx.arc(px, py, 5, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.arc(px, py, 1.5, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(255,255,255,0.9)";
+        ctx.fill();
+      }
+
+      // draw nodes with pulse and rings
       for (const n of nodes) {
         const pulse = Math.sin(time * 2 + n.pulseOffset) * 0.5 + 0.5;
-        const r = n.radius + pulse * 0.8;
+        const r = n.radius + pulse * 0.6;
 
         // outer glow
-        const glow = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, r * 4);
-        glow.addColorStop(0, `rgba(236,72,153,${0.1 + pulse * 0.05})`);
+        const glow = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, r * 5);
+        glow.addColorStop(0, `rgba(236,72,153,${0.08 + pulse * 0.04})`);
         glow.addColorStop(1, "rgba(236,72,153,0)");
         ctx.fillStyle = glow;
         ctx.beginPath();
-        ctx.arc(n.x, n.y, r * 4, 0, Math.PI * 2);
+        ctx.arc(n.x, n.y, r * 5, 0, Math.PI * 2);
         ctx.fill();
+
+        // pulsing ring on some nodes
+        if (n.layer > 0.7) {
+          const ringR = r * 2 + pulse * 6;
+          ctx.strokeStyle = `rgba(236,72,153,${0.08 * (1 - pulse)})`;
+          ctx.lineWidth = 0.5;
+          ctx.beginPath();
+          ctx.arc(n.x, n.y, ringR, 0, Math.PI * 2);
+          ctx.stroke();
+        }
 
         // core dot
         ctx.beginPath();
         ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(236,72,153,${0.4 + pulse * 0.2})`;
+        const coreGrad = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, r);
+        coreGrad.addColorStop(0, `rgba(255,255,255,${0.7 + pulse * 0.3})`);
+        coreGrad.addColorStop(1, `rgba(236,72,153,${0.5 + pulse * 0.2})`);
+        ctx.fillStyle = coreGrad;
         ctx.fill();
       }
 
@@ -139,7 +243,9 @@ function ConstellationBg() {
       cancelAnimationFrame(animId);
       window.removeEventListener("resize", resize);
       window.removeEventListener("mousemove", handleMouse);
-      window.removeEventListener("mouseleave", handleMouseLeave);
+      window.removeEventListener("touchmove", handleTouch);
+      window.removeEventListener("mouseleave", handleLeave);
+      window.removeEventListener("touchend", handleLeave);
     };
   }, []);
 
