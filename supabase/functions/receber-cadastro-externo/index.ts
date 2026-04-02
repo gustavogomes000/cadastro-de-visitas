@@ -93,6 +93,31 @@ Deno.serve(async (req) => {
 
     } else {
       const cpfToSave = cleanCpf || `TEMP${Date.now()}`;
+      // Check if pessoa already exists by CPF
+      if (cleanCpf && cleanCpf.length >= 11) {
+        const { data: existing } = await supabase.from("pessoas").select("id").eq("cpf", cleanCpf).maybeSingle();
+        if (existing) {
+          // Update existing pessoa instead of inserting
+          await supabase.from("pessoas").update({
+            nome: cleanNome,
+            whatsapp: whatsapp ? String(whatsapp).slice(0, 20) : undefined,
+            telefone: telefone ? String(telefone).slice(0, 20) : undefined,
+            email: email ? String(email).slice(0, 255) : undefined,
+            titulo_eleitor: titulo_eleitor ? String(titulo_eleitor).slice(0, 20) : undefined,
+            zona_eleitoral: zona_eleitoral ? String(zona_eleitoral).slice(0, 10) : undefined,
+            secao_eleitoral: secao_eleitoral ? String(secao_eleitoral).slice(0, 10) : undefined,
+            municipio: regiao_atuacao ? String(regiao_atuacao).slice(0, 255) : undefined,
+            atualizado_em: new Date().toISOString(),
+          }).eq("id", existing.id);
+          insertedId = existing.id;
+          
+          return new Response(JSON.stringify({
+            aviso: "Pessoa já cadastrada, dados atualizados", id: existing.id,
+          }), {
+            status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      }
       const { data, error } = await supabase.from("pessoas").insert({
         nome: cleanNome,
         cpf: cpfToSave,
