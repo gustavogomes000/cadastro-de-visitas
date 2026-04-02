@@ -167,13 +167,16 @@ export default function NovaVisita() {
   const { nomeUsuario, isAdmin } = useAuth();
   const isHomePage = location.pathname === "/";
 
+  const [cpfInput, setCpfInput] = useState("");
+  const [cpfChecked, setCpfChecked] = useState(false);
+  const [showDuplicateDialog, setShowDuplicateDialog] = useState(false);
   const [searchInput, setSearchInput] = useState("");
   const searchInputRef = useRef(searchInput);
   const [searching, setSearching] = useState(false);
   const [saving, setSaving] = useState(false);
   const [existingPessoaId, setExistingPessoaId] = useState<string | null>(pessoaId || null);
   const [locked, setLocked] = useState(false);
-  const [showForm, setShowForm] = useState(true);
+  const [showForm, setShowForm] = useState(false);
   const [pessoaStatus, setPessoaStatus] = useState<"idle" | "found" | "new" | "api">("idle");
   const [visitHistory, setVisitHistory] = useState<any[]>([]);
 
@@ -235,7 +238,8 @@ export default function NovaVisita() {
       setPessoaStatus("found");
       setLocked(true);
       setShowForm(true);
-      setSearchInput(data.cpf && !data.cpf.startsWith("TEMP") ? maskCPF(data.cpf) : data.nome || "");
+      setCpfInput(data.cpf && !data.cpf.startsWith("TEMP") ? maskCPF(data.cpf) : "");
+      setCpfChecked(true);
       loadVisitHistory(id);
     }
   }
@@ -264,86 +268,73 @@ export default function NovaVisita() {
 
   searchInputRef.current = searchInput;
 
-  const handleSearch = useCallback(async () => {
-    const trimmed = searchInputRef.current.trim();
-    if (!trimmed) return;
-    setSearching(true);
-    const raw = unmaskCPF(trimmed);
-    const isCPF = raw.length >= 11 && /^\d{11}$/.test(raw.slice(0, 11));
+  // CPF input handler — auto-check when 11 digits
+  const handleCpfInput = async (value: string) => {
+    const raw = unmaskCPF(value);
+    if (raw.length > 11) return;
+    setCpfInput(maskCPF(value));
+    setCpfChecked(false);
+    setShowForm(false);
+    setPessoaStatus("idle");
+    setExistingPessoaId(null);
+    setPessoa({ ...EMPTY_PESSOA });
+    setVisitHistory([]);
 
-    if (isCPF) {
-      if (!validateCPF(raw.slice(0, 11))) {
+    if (raw.length === 11) {
+      if (!validateCPF(raw)) {
         toast({ title: "CPF inválido", variant: "destructive" });
-        setSearching(false);
         return;
       }
-      const { data: existente } = await supabase.from("pessoas").select("*").eq("cpf", raw.slice(0, 11)).maybeSingle();
+      setSearching(true);
+      const { data: existente } = await supabase.from("pessoas").select("*").eq("cpf", raw).maybeSingle();
       if (existente) {
         fillPessoa(existente);
         setExistingPessoaId(existente.id);
         setPessoaStatus("found");
-        setLocked(true);
-        setShowForm(true);
+        setCpfChecked(true);
+        setShowDuplicateDialog(true);
         loadVisitHistory(existente.id);
         setSearching(false);
         return;
       }
+      // Try BrasilAPI
       try {
-        const resp = await fetch(`https://brasilapi.com.br/api/cpf/v1/${raw.slice(0, 11)}`);
+        const resp = await fetch(`https://brasilapi.com.br/api/cpf/v1/${raw}`);
         if (resp.ok) {
           const data = await resp.json();
-          setPessoa(prev => ({ ...prev, cpf: raw.slice(0, 11), nome: data.nome || "", data_nascimento: data.data_nascimento ? data.data_nascimento.slice(0, 10) : "" }));
+          setPessoa(prev => ({ ...prev, cpf: raw, nome: data.nome || "", data_nascimento: data.data_nascimento ? data.data_nascimento.slice(0, 10) : "" }));
           setPessoaStatus("api");
         } else {
-          setPessoa(prev => ({ ...prev, cpf: raw.slice(0, 11) }));
+          setPessoa(prev => ({ ...prev, cpf: raw }));
           setPessoaStatus("new");
         }
       } catch {
-        setPessoa(prev => ({ ...prev, cpf: raw.slice(0, 11) }));
+        setPessoa(prev => ({ ...prev, cpf: raw }));
         setPessoaStatus("new");
       }
-      setLocked(true);
+      setCpfChecked(true);
       setShowForm(true);
-    } else {
-      const { data: matches } = await supabase.from("pessoas").select("*").ilike("nome", `%${trimmed}%`).limit(1);
-      if (matches && matches.length > 0) {
-        fillPessoa(matches[0]);
-        setExistingPessoaId(matches[0].id);
-        setPessoaStatus("found");
-        setLocked(true);
-        setShowForm(true);
-        loadVisitHistory(matches[0].id);
-      } else {
-        setPessoa(prev => ({ ...prev, nome: trimmed }));
-        setPessoaStatus("new");
-        setLocked(true);
-        setShowForm(true);
-      }
+      setSearching(false);
     }
-    setSearching(false);
+  };
+
+  const handleSearch = useCallback(async () => {
+    // kept for compatibility but main flow is via CPF
   }, [toast]);
 
   const handleInputChange = (value: string) => {
-    const raw = unmaskCPF(value);
-    if (/^\d+$/.test(raw) && raw.length <= 11) {
-      const masked = maskCPF(value);
-      setSearchInput(masked);
-      if (raw.length === 11) {
-        setPessoa(prev => ({ ...prev, cpf: raw }));
-        searchInputRef.current = masked;
-        handleSearch();
-      }
-    } else {
-      setSearchInput(value);
-    }
+    setSearchInput(value);
   };
 
   const clearSearch = () => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
+    setCpfInput("");
+    setCpfChecked(false);
+    setShowDuplicateDialog(false);
     setSearchInput("");
     setLocked(false);
     setPessoaStatus("idle");
-    setShowForm(true);
+    setShowForm(false);
     setExistingPessoaId(null);
     setPessoa({ ...EMPTY_PESSOA });
     setVisitHistory([]);
@@ -416,6 +407,11 @@ export default function NovaVisita() {
   };
 
   const handleSave = async () => {
+    const rawCpf = unmaskCPF(cpfInput);
+    if (rawCpf.length !== 11 || !validateCPF(rawCpf)) {
+      toast({ title: "CPF obrigatório e válido", variant: "destructive" });
+      return;
+    }
     if (!pessoa.nome && formMode === "full") {
       toast({ title: "Nome obrigatório", variant: "destructive" });
       return;
@@ -543,7 +539,79 @@ export default function NovaVisita() {
         </div>
       )}
 
-      {pessoaStatus === "found" && (
+      {/* CPF Field — always visible */}
+      <div className="card-section mb-4 animate-fade-in">
+        <div className="space-y-1.5">
+          <label className="text-xs font-bold text-foreground">CPF *</label>
+          <div className="relative">
+            <input
+              type="text"
+              inputMode="numeric"
+              value={cpfInput}
+              onChange={(e) => handleCpfInput(e.target.value)}
+              placeholder="000.000.000-00"
+              disabled={pessoaId ? true : false}
+              className={cn(
+                "w-full h-12 rounded-lg bg-background border border-border px-4 text-sm outline-none focus:ring-2 focus:ring-primary/30 transition-shadow placeholder:text-muted-foreground/50",
+                pessoaId && "opacity-60 bg-muted"
+              )}
+            />
+            {searching && <Loader2 size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground animate-spin" />}
+            {cpfChecked && !searching && pessoaStatus !== "idle" && (
+              <button type="button" onClick={clearSearch} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                <X size={14} />
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Duplicate person dialog */}
+      {showDuplicateDialog && pessoaStatus === "found" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowDuplicateDialog(false)}>
+          <div className="bg-card rounded-2xl shadow-2xl max-w-sm w-full p-6 space-y-4 animate-fade-in" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-amber-500/15 flex items-center justify-center">
+                <span className="text-lg">⚠️</span>
+              </div>
+              <div>
+                <p className="text-base font-bold">Pessoa já cadastrada</p>
+                <p className="text-xs text-muted-foreground">Este CPF já existe no sistema</p>
+              </div>
+            </div>
+            <div className="p-3 rounded-lg bg-muted/50 border border-border">
+              <p className="text-sm font-bold">{pessoa.nome}</p>
+              {pessoa.whatsapp && <p className="text-xs text-muted-foreground">WhatsApp: {pessoa.whatsapp}</p>}
+              {pessoa.municipio && <p className="text-xs text-muted-foreground">{pessoa.municipio}{pessoa.uf ? ` - ${pessoa.uf}` : ""}</p>}
+              {visitHistory.length > 0 && (
+                <p className="text-xs text-primary font-semibold mt-1">📋 {visitHistory.length} visita{visitHistory.length !== 1 ? "s" : ""} registrada{visitHistory.length !== 1 ? "s" : ""}</p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <button
+                onClick={() => { setShowDuplicateDialog(false); setShowForm(true); }}
+                className="w-full h-11 rounded-lg font-bold text-white gradient-primary active:scale-[0.98] transition-transform text-sm"
+              >
+                Registrar nova visita
+              </button>
+              <button
+                onClick={() => { setShowDuplicateDialog(false); navigate(`/pessoa/${existingPessoaId}`); }}
+                className="w-full h-10 rounded-lg text-sm text-primary font-semibold border border-primary/30 hover:bg-primary/5 active:scale-95 transition"
+              >
+                Ver cadastro completo
+              </button>
+              <button
+                onClick={() => { setShowDuplicateDialog(false); clearSearch(); }}
+                className="w-full h-9 rounded-lg text-xs text-muted-foreground active:scale-95 transition"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pessoaStatus === "found" && !showDuplicateDialog && showForm && (
         <div className="card-section mb-4 animate-fade-in">
           <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
             <CheckCircle2 size={18} className="text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
@@ -555,7 +623,7 @@ export default function NovaVisita() {
         </div>
       )}
 
-      {pessoaStatus === "found" && visitHistory.length > 0 && (
+      {pessoaStatus === "found" && !showDuplicateDialog && showForm && visitHistory.length > 0 && (
         <div className="card-section mb-4 animate-fade-in">
           <p className="text-sm font-bold text-primary uppercase tracking-wide mb-2">
             📋 Histórico ({visitHistory.length} visita{visitHistory.length !== 1 ? "s" : ""})
@@ -586,11 +654,7 @@ export default function NovaVisita() {
                 <p className="text-sm font-bold text-primary uppercase tracking-wide">Dados Pessoais</p>
               </div>
               <div className="space-y-4">
-                <InputField label="Nome completo *" value={pessoa.nome} onChange={(v) => setPessoa({ ...pessoa, nome: v })} placeholder="Nome da liderança" />
-                <InputField label="CPF" value={maskCPF(pessoa.cpf)} onChange={(v) => {
-                  const raw = unmaskCPF(v);
-                  if (raw.length <= 11) setPessoa({ ...pessoa, cpf: raw });
-                }} placeholder="000.000.000-00" />
+                <InputField label="Nome completo *" value={pessoa.nome} onChange={(v) => setPessoa({ ...pessoa, nome: v })} placeholder="Nome completo" />
                 <InputField label="WhatsApp" value={pessoa.whatsapp} onChange={(v) => setPessoa({ ...pessoa, whatsapp: maskPhone(v) })} placeholder="(00) 00000-0000" />
                 <InputField label="Rede social (Instagram ou Facebook)" value={pessoa.instagram} onChange={(v) => setPessoa({ ...pessoa, instagram: v })} placeholder="@usuario ou link" />
                 <InputField label="Data de nascimento" value={pessoa.data_nascimento} onChange={(v) => setPessoa({ ...pessoa, data_nascimento: v })} type="date" />
