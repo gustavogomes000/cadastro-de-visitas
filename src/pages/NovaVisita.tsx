@@ -457,13 +457,15 @@ export default function NovaVisita() {
   };
 
   const handleSave = async () => {
-    if (!pessoa.cpf || pessoa.cpf.length !== 11 || !validateCPF(pessoa.cpf)) {
-      toast({ title: "CPF obrigatório e válido", variant: "destructive" });
-      return;
-    }
-    if (!pessoa.nome && formMode === "full") {
-      toast({ title: "Nome obrigatório", variant: "destructive" });
-      return;
+    if (pessoaStatus !== "found") {
+      if (!pessoa.cpf || pessoa.cpf.length !== 11 || !validateCPF(pessoa.cpf)) {
+        toast({ title: "CPF obrigatório e válido", variant: "destructive" });
+        return;
+      }
+      if (!pessoa.nome) {
+        toast({ title: "Nome obrigatório", variant: "destructive" });
+        return;
+      }
     }
     if (!visita.assunto) {
       toast({ title: "Assunto obrigatório", variant: "destructive" });
@@ -639,7 +641,8 @@ export default function NovaVisita() {
             <CheckCircle2 size={18} className="text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
             <div>
               <p className="text-sm font-bold">{pessoa.nome}</p>
-              <p className="text-xs text-muted-foreground">Pessoa cadastrada — registre a visita abaixo</p>
+              {pessoa.whatsapp && <p className="text-xs text-muted-foreground">WhatsApp: {pessoa.whatsapp}</p>}
+              {pessoa.municipio && <p className="text-xs text-muted-foreground">{pessoa.municipio}{pessoa.uf ? ` - ${pessoa.uf}` : ""}</p>}
             </div>
           </div>
         </div>
@@ -666,66 +669,73 @@ export default function NovaVisita() {
         </div>
       )}
 
-      {showForm && (
+      {/* Simplified form for existing person — just date + assunto + save */}
+      {pessoaStatus === "found" && (
+        <div className="space-y-4 animate-fade-in">
+          <div className="card-section">
+            <div className="flex items-center gap-2 mb-4">
+              <span className="text-primary">📝</span>
+              <p className="text-sm font-bold text-primary uppercase tracking-wide">Registrar Visita</p>
+            </div>
+            <div className="space-y-4">
+              <InputField label="Data e hora" value={visita.data_hora} onChange={(v) => setVisita({ ...visita, data_hora: v })} type="datetime-local" />
+              <InputField label="Motivo / Assunto *" value={visita.assunto} onChange={(v) => setVisita({ ...visita, assunto: v })} placeholder="Descreva o motivo da visita" />
+            </div>
+          </div>
+
+          <button onClick={handleSave} disabled={saving}
+            className="w-full h-12 rounded-lg font-bold text-white gradient-primary shadow-lg shadow-pink-500/25 active:scale-[0.98] transition-transform disabled:opacity-70 flex items-center justify-center gap-2 text-base">
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+            {saving ? "Salvando…" : "Salvar visita"}
+          </button>
+          <div className="h-4" />
+        </div>
+      )}
+
+      {/* Full form for new person */}
+      {showForm && pessoaStatus !== "found" && (
         <div className="space-y-4 animate-fade-in">
 
-          {(formMode === "full" || isAdmin) && (
-            <div className="card-section">
-              <div className="flex items-center gap-2 mb-4">
-                <User size={16} className="text-primary" />
-                <p className="text-sm font-bold text-primary uppercase tracking-wide">Dados Pessoais</p>
-              </div>
-              <div className="space-y-4">
-                <InputField label="CPF *" value={maskCPF(pessoa.cpf)} onChange={(v) => handleCpfChange(v)} placeholder="000.000.000-00" />
-                <InputField label="Nome completo *" value={pessoa.nome} onChange={(v) => setPessoa({ ...pessoa, nome: v })} placeholder="Nome completo" />
-                <InputField label="WhatsApp" value={pessoa.whatsapp} onChange={(v) => setPessoa({ ...pessoa, whatsapp: maskPhone(v) })} placeholder="(00) 00000-0000" />
-                <InputField label="Rede social (Instagram ou Facebook)" value={pessoa.instagram} onChange={(v) => setPessoa({ ...pessoa, instagram: v })} placeholder="@usuario ou link" />
-                <InputField label="Data de nascimento" value={pessoa.data_nascimento} onChange={(v) => setPessoa({ ...pessoa, data_nascimento: v })} type="date" />
-              </div>
+          <div className="card-section">
+            <div className="flex items-center gap-2 mb-4">
+              <User size={16} className="text-primary" />
+              <p className="text-sm font-bold text-primary uppercase tracking-wide">Dados Pessoais</p>
             </div>
-          )}
+            <div className="space-y-4">
+              <InputField label="CPF *" value={maskCPF(pessoa.cpf)} onChange={(v) => handleCpfChange(v)} placeholder="000.000.000-00" />
+              <InputField label="Nome completo *" value={pessoa.nome} onChange={(v) => setPessoa({ ...pessoa, nome: v })} placeholder="Nome completo" />
+              <InputField label="WhatsApp" value={pessoa.whatsapp} onChange={(v) => setPessoa({ ...pessoa, whatsapp: maskPhone(v) })} placeholder="(00) 00000-0000" />
+              <InputField label="Rede social (Instagram ou Facebook)" value={pessoa.instagram} onChange={(v) => setPessoa({ ...pessoa, instagram: v })} placeholder="@usuario ou link" />
+              <InputField label="Data de nascimento" value={pessoa.data_nascimento} onChange={(v) => setPessoa({ ...pessoa, data_nascimento: v })} type="date" />
+            </div>
+          </div>
 
-          {(formMode === "full" || isAdmin) && (
-            <div className="card-section">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <span className="text-primary">🗳️</span>
-                  <p className="text-sm font-bold text-primary uppercase tracking-wide">Dados Eleitorais</p>
-                </div>
-                <a href="https://www.tse.jus.br/servicos-eleitorais/autoatendimento-eleitoral#/atendimento-eleitor"
-                  target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline active:scale-95 transition-transform">
-                  <ExternalLink size={13} />
-                  Consultar TSE
-                </a>
+          <div className="card-section">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <span className="text-primary">🗳️</span>
+                <p className="text-sm font-bold text-primary uppercase tracking-wide">Dados Eleitorais</p>
               </div>
-              <div className="space-y-4">
-                <InputField label="Título de eleitor" value={pessoa.titulo_eleitor} onChange={(v) => setPessoa({ ...pessoa, titulo_eleitor: maskTitulo(v) })} placeholder="0000 0000 0000" />
-                <div className="grid grid-cols-2 gap-3">
-                  <InputField label="Zona eleitoral" value={pessoa.zona_eleitoral} onChange={(v) => setPessoa({ ...pessoa, zona_eleitoral: v.replace(/\D/g, "") })} placeholder="Ex: 42" />
-                  <InputField label="Seção" value={pessoa.secao_eleitoral} onChange={(v) => setPessoa({ ...pessoa, secao_eleitoral: v.replace(/\D/g, "") })} placeholder="Ex: 123" />
-                </div>
-                <InputField label="Colégio eleitoral" value={pessoa.colegio_eleitoral || ""} onChange={(v) => setPessoa({ ...pessoa, colegio_eleitoral: v })} placeholder="Nome do colégio eleitoral" />
-                <div className="grid grid-cols-2 gap-3">
-                  <InputField label="Município" value={pessoa.municipio} onChange={(v) => setPessoa({ ...pessoa, municipio: v })} placeholder="Cidade" />
-                  <SelectField label="UF" value={pessoa.uf} onChange={(v) => setPessoa({ ...pessoa, uf: v })} options={UF_OPTIONS} />
-                </div>
-                
+              <a href="https://www.tse.jus.br/servicos-eleitorais/autoatendimento-eleitoral#/atendimento-eleitor"
+                target="_blank" rel="noopener noreferrer"
+                className="flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline active:scale-95 transition-transform">
+                <ExternalLink size={13} />
+                Consultar TSE
+              </a>
+            </div>
+            <div className="space-y-4">
+              <InputField label="Título de eleitor" value={pessoa.titulo_eleitor} onChange={(v) => setPessoa({ ...pessoa, titulo_eleitor: maskTitulo(v) })} placeholder="0000 0000 0000" />
+              <div className="grid grid-cols-2 gap-3">
+                <InputField label="Zona eleitoral" value={pessoa.zona_eleitoral} onChange={(v) => setPessoa({ ...pessoa, zona_eleitoral: v.replace(/\D/g, "") })} placeholder="Ex: 42" />
+                <InputField label="Seção" value={pessoa.secao_eleitoral} onChange={(v) => setPessoa({ ...pessoa, secao_eleitoral: v.replace(/\D/g, "") })} placeholder="Ex: 123" />
+              </div>
+              <InputField label="Colégio eleitoral" value={pessoa.colegio_eleitoral || ""} onChange={(v) => setPessoa({ ...pessoa, colegio_eleitoral: v })} placeholder="Nome do colégio eleitoral" />
+              <div className="grid grid-cols-2 gap-3">
+                <InputField label="Município" value={pessoa.municipio} onChange={(v) => setPessoa({ ...pessoa, municipio: v })} placeholder="Cidade" />
+                <SelectField label="UF" value={pessoa.uf} onChange={(v) => setPessoa({ ...pessoa, uf: v })} options={UF_OPTIONS} />
               </div>
             </div>
-          )}
-
-          {formMode === "visit_only" && !isAdmin && (
-            <div className="card-section">
-              <div className="flex items-center gap-2 mb-2">
-                <User size={16} className="text-primary" />
-                <p className="text-sm font-bold text-primary uppercase tracking-wide">Visitante</p>
-              </div>
-              <p className="text-sm font-semibold">{pessoa.nome}</p>
-              {pessoa.telefone && <p className="text-xs text-muted-foreground">Tel: {pessoa.telefone}</p>}
-              {pessoa.municipio && <p className="text-xs text-muted-foreground">{pessoa.municipio} - {pessoa.uf}</p>}
-            </div>
-          )}
+          </div>
 
           {/* DADOS DA VISITA */}
           <div className="card-section">
