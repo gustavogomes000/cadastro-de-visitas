@@ -335,7 +335,10 @@ const Hyperspeed = ({ effectOptions = DEFAULT_EFFECT_OPTIONS }: { effectOptions?
     #define USE_FOG;
     ${THREE.ShaderChunk['fog_pars_fragment']}
     varying vec3 vColor;
-    void main(){ gl_FragColor = vec4(vColor,1.); ${THREE.ShaderChunk['fog_fragment']} }`;
+    void main(){
+      gl_FragColor = vec4(vColor,1.);
+      ${THREE.ShaderChunk['fog_fragment']}
+    }`;
 
     const roadBaseFragment = `
     #define USE_FOG;
