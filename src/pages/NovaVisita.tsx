@@ -123,6 +123,7 @@ async function fetchAllUsuariosExternos(): Promise<UsuarioExterno[]> {
     const [suplData, lidData] = await Promise.all([
       fetch(`${EXTERNAL_FUNCTIONS_URL}/buscar-suplentes`, { method: "GET", headers: EXTERNAL_FUNCTIONS_HEADERS }).then(r => r.ok ? r.json() : []).catch(() => []),
       fetch(`${EXTERNAL_FUNCTIONS_URL}/buscar-liderancas-externo`, { method: "GET", headers: EXTERNAL_FUNCTIONS_HEADERS }).then(r => r.ok ? r.json() : []).catch(() => []),
+    ]).catch(() => [[] as any, [] as any] as const);
     ]);
 
     const result: UsuarioExterno[] = [];
