@@ -637,14 +637,14 @@ export default function NovaVisita() {
 
               {/* Quem indicou — busca via Edge Function */}
               <div className="space-y-1.5 relative" ref={indicadorContainerRef}>
-                <label className="text-xs font-bold text-foreground">Quem indicou</label>
+                <label className="text-xs font-bold text-foreground">Quem indicou / Responsável</label>
                 <div className="relative">
                   <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                   <input
                     value={indicadorBusca}
                     onChange={(e) => handleIndicadorInput(e.target.value)}
-                    onFocus={() => indicadorResultados.suplentes.length + indicadorResultados.liderancas.length > 0 && setIndicadorDropdownAberto(true)}
-                    placeholder="Buscar suplente ou liderança..."
+                    onFocus={() => indicadorResultados.length > 0 && setIndicadorDropdownAberto(true)}
+                    placeholder="Buscar por nome..."
                     className="w-full h-12 rounded-lg bg-background border border-border pl-9 pr-10 text-sm outline-none focus:ring-2 focus:ring-primary/30 transition-shadow placeholder:text-muted-foreground/50"
                   />
                   {indicadorBuscando && (
@@ -659,64 +659,29 @@ export default function NovaVisita() {
 
                 {indicadorSelecionado && (
                   <div className="flex items-center gap-1.5 mt-1">
-                    <span className={cn(
-                      "text-[10px] px-2 py-0.5 rounded-full font-semibold",
-                      indicadorSelecionado.tipo === "suplente"
-                        ? "bg-blue-500/15 text-blue-600"
-                        : "bg-green-500/15 text-green-600"
-                    )}>
-                      {indicadorSelecionado.tipo === "suplente" ? "Suplente" : "Liderança"}
+                    <span className={cn("text-[10px] px-2 py-0.5 rounded-full font-semibold", getTagColor(indicadorSelecionado.tipo))}>
+                      {indicadorSelecionado.tag}
                     </span>
-                    <span className="text-xs text-muted-foreground">{indicadorSelecionado.nome}</span>
+                    <span className="text-xs text-muted-foreground">{indicadorSelecionado.subtitulo || indicadorSelecionado.nome}</span>
                   </div>
                 )}
 
-                {indicadorDropdownAberto && (indicadorResultados.suplentes.length > 0 || indicadorResultados.liderancas.length > 0) && (
+                {indicadorDropdownAberto && indicadorResultados.length > 0 && (
                   <div className="absolute z-50 w-full mt-1 bg-card border border-border rounded-xl shadow-lg max-h-[280px] overflow-y-auto">
-                    {indicadorResultados.suplentes.length > 0 && (
-                      <>
-                        <div className="text-[10px] uppercase tracking-wide text-muted-foreground px-3 py-1.5 font-semibold border-b border-border/50 sticky top-0 bg-card">
-                          Suplentes
+                    {indicadorResultados.map((u) => (
+                      <button key={`${u.id}-${u.tipo}`} type="button" onClick={() => selecionarIndicador(u)}
+                        className="w-full text-left px-3 py-2.5 hover:bg-muted flex items-center justify-between transition-colors cursor-pointer border-b border-border/30 last:border-0">
+                        <div>
+                          <span className="text-sm font-semibold">{u.nome}</span>
+                          {u.subtitulo && (
+                            <p className="text-xs text-muted-foreground">{u.subtitulo}</p>
+                          )}
                         </div>
-                        {indicadorResultados.suplentes.map((s) => (
-                          <button key={s.id} type="button" onClick={() => selecionarIndicador(s, "suplente")}
-                            className="w-full text-left px-3 py-2.5 hover:bg-muted flex items-center justify-between transition-colors cursor-pointer">
-                            <div>
-                              <span className="text-sm font-semibold">{s.nome}</span>
-                              {(s.numero_urna || s.partido) && (
-                                <span className="text-xs text-muted-foreground ml-2">
-                                  {[s.numero_urna, s.partido].filter(Boolean).join(" · ")}
-                                </span>
-                              )}
-                            </div>
-                            <span className="bg-blue-500/15 text-blue-600 text-[10px] px-1.5 py-0.5 rounded-full font-semibold flex-shrink-0">
-                              Suplente
-                            </span>
-                          </button>
-                        ))}
-                      </>
-                    )}
-                    {indicadorResultados.liderancas.length > 0 && (
-                      <>
-                        <div className="text-[10px] uppercase tracking-wide text-muted-foreground px-3 py-1.5 font-semibold border-b border-border/50 sticky top-0 bg-card">
-                          Lideranças
-                        </div>
-                        {indicadorResultados.liderancas.map((l) => (
-                          <button key={l.id} type="button" onClick={() => selecionarIndicador(l, "lideranca")}
-                            className="w-full text-left px-3 py-2.5 hover:bg-muted flex items-center justify-between transition-colors cursor-pointer">
-                            <div>
-                              <span className="text-sm font-semibold">{l.nome}</span>
-                              {l.regiao && (
-                                <span className="text-xs text-muted-foreground ml-2">{l.regiao}</span>
-                              )}
-                            </div>
-                            <span className="bg-green-500/15 text-green-600 text-[10px] px-1.5 py-0.5 rounded-full font-semibold flex-shrink-0">
-                              Liderança
-                            </span>
-                          </button>
-                        ))}
-                      </>
-                    )}
+                        <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-semibold flex-shrink-0", getTagColor(u.tipo))}>
+                          {u.tag}
+                        </span>
+                      </button>
+                    ))}
                   </div>
                 )}
               </div>
