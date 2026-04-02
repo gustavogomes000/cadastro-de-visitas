@@ -266,62 +266,115 @@ export default function NovaVisita() {
 
   searchInputRef.current = searchInput;
 
-  // CPF input handler — auto-check when 11 digits
-  const handleCpfInput = async (value: string) => {
+  // Check CPF for duplicates when typing in the CPF field
+  const handleCpfChange = async (value: string) => {
     const raw = unmaskCPF(value);
     if (raw.length > 11) return;
-    setCpfInput(maskCPF(value));
-    setCpfChecked(false);
-    setShowForm(false);
-    setPessoaStatus("idle");
-    setExistingPessoaId(null);
-    setPessoa({ ...EMPTY_PESSOA });
-    setVisitHistory([]);
+    setPessoa(prev => ({ ...prev, cpf: raw }));
 
     if (raw.length === 11) {
       if (!validateCPF(raw)) {
         toast({ title: "CPF inválido", variant: "destructive" });
         return;
       }
-      setSearching(true);
+      // Check if person already exists
       const { data: existente } = await supabase.from("pessoas").select("*").eq("cpf", raw).maybeSingle();
-      if (existente) {
-        fillPessoa(existente);
-        setExistingPessoaId(existente.id);
-        setPessoaStatus("found");
-        setCpfChecked(true);
+      if (existente && existente.id !== existingPessoaId) {
+        setDuplicatePessoa(existente);
+        // Load visit history for duplicate
+        const { data: visits } = await supabase
+          .from("visitas")
+          .select("id, data_hora, assunto, status")
+          .eq("pessoa_id", existente.id)
+          .order("data_hora", { ascending: false })
+          .limit(5);
+        setVisitHistory(visits || []);
         setShowDuplicateDialog(true);
-        loadVisitHistory(existente.id);
-        setSearching(false);
-        return;
       }
-      // Try BrasilAPI
-      try {
-        const resp = await fetch(`https://brasilapi.com.br/api/cpf/v1/${raw}`);
-        if (resp.ok) {
-          const data = await resp.json();
-          setPessoa(prev => ({ ...prev, cpf: raw, nome: data.nome || "", data_nascimento: data.data_nascimento ? data.data_nascimento.slice(0, 10) : "" }));
-          setPessoaStatus("api");
-        } else {
-          setPessoa(prev => ({ ...prev, cpf: raw }));
-          setPessoaStatus("new");
-        }
-      } catch {
-        setPessoa(prev => ({ ...prev, cpf: raw }));
-        setPessoaStatus("new");
-      }
-      setCpfChecked(true);
-      setShowForm(true);
-      setSearching(false);
+    }
+  };
+
+  const handleDuplicateRegisterVisit = () => {
+    if (duplicatePessoa) {
+      fillPessoa(duplicatePessoa);
+      setExistingPessoaId(duplicatePessoa.id);
+      setPessoaStatus("found");
+      setShowDuplicateDialog(false);
     }
   };
 
   const handleSearch = useCallback(async () => {
-    // kept for compatibility but main flow is via CPF
+    const trimmed = searchInputRef.current.trim();
+    if (!trimmed) return;
+    setSearching(true);
+    const raw = unmaskCPF(trimmed);
+    const isCPF = raw.length >= 11 && /^\d{11}$/.test(raw.slice(0, 11));
+
+    if (isCPF) {
+      if (!validateCPF(raw.slice(0, 11))) {
+        toast({ title: "CPF inválido", variant: "destructive" });
+        setSearching(false);
+        return;
+      }
+      const { data: existente } = await supabase.from("pessoas").select("*").eq("cpf", raw.slice(0, 11)).maybeSingle();
+      if (existente) {
+        fillPessoa(existente);
+        setExistingPessoaId(existente.id);
+        setPessoaStatus("found");
+        setLocked(true);
+        setShowForm(true);
+        loadVisitHistory(existente.id);
+        setSearching(false);
+        return;
+      }
+      try {
+        const resp = await fetch(`https://brasilapi.com.br/api/cpf/v1/${raw.slice(0, 11)}`);
+        if (resp.ok) {
+          const data = await resp.json();
+          setPessoa(prev => ({ ...prev, cpf: raw.slice(0, 11), nome: data.nome || "", data_nascimento: data.data_nascimento ? data.data_nascimento.slice(0, 10) : "" }));
+          setPessoaStatus("api");
+        } else {
+          setPessoa(prev => ({ ...prev, cpf: raw.slice(0, 11) }));
+          setPessoaStatus("new");
+        }
+      } catch {
+        setPessoa(prev => ({ ...prev, cpf: raw.slice(0, 11) }));
+        setPessoaStatus("new");
+      }
+      setLocked(true);
+      setShowForm(true);
+    } else {
+      const { data: matches } = await supabase.from("pessoas").select("*").ilike("nome", `%${trimmed}%`).limit(1);
+      if (matches && matches.length > 0) {
+        fillPessoa(matches[0]);
+        setExistingPessoaId(matches[0].id);
+        setPessoaStatus("found");
+        setLocked(true);
+        setShowForm(true);
+        loadVisitHistory(matches[0].id);
+      } else {
+        setPessoa(prev => ({ ...prev, nome: trimmed }));
+        setPessoaStatus("new");
+        setLocked(true);
+        setShowForm(true);
+      }
+    }
+    setSearching(false);
   }, [toast]);
 
   const handleInputChange = (value: string) => {
-    setSearchInput(value);
+    const raw = unmaskCPF(value);
+    if (/^\d+$/.test(raw) && raw.length <= 11) {
+      const masked = maskCPF(value);
+      setSearchInput(masked);
+      if (raw.length === 11) {
+        setPessoa(prev => ({ ...prev, cpf: raw }));
+        searchInputRef.current = masked;
+        handleSearch();
+      }
+    } else {
+      setSearchInput(value);
+    }
   };
 
   const clearSearch = () => {
