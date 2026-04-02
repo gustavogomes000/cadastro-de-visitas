@@ -3,7 +3,6 @@ import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { AppLayout } from "@/components/AppLayout";
 import { ArrowLeft, Pencil, Trash2 } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { maskCPF, formatDateTime } from "@/lib/masks";
 import { useToast } from "@/hooks/use-toast";
 import {
