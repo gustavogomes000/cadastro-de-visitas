@@ -146,6 +146,12 @@ export default function NovaVisita() {
   const nomeContainerRef = useRef<HTMLDivElement>(null);
   const nomeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // CPF autocomplete states
+  const [cpfSugestoes, setCpfSugestoes] = useState<{ id: string; nome: string; cpf: string; municipio?: string }[]>([]);
+  const [cpfDropdownAberto, setCpfDropdownAberto] = useState(false);
+  const cpfContainerRef = useRef<HTMLDivElement>(null);
+  const cpfDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const formMode = pessoaStatus === "found" ? "visit_only" : "full";
 
   const [pessoa, setPessoa] = useState<DadosPessoa>({ ...EMPTY_PESSOA });
