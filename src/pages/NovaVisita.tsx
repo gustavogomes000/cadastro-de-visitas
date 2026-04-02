@@ -149,6 +149,10 @@ export default function NovaVisita() {
   const cpfContainerRef = useRef<HTMLDivElement>(null);
   const cpfDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Cache local de pessoas para busca rápida
+  const pessoasCacheRef = useRef<{ id: string; nome: string; cpf: string; municipio?: string; uf?: string; whatsapp?: string; origem?: string }[]>([]);
+  const pessoasCacheLoaded = useRef(false);
+
   const formMode = pessoaStatus === "found" ? "visit_only" : "full";
 
   const [pessoa, setPessoa] = useState<DadosPessoa>({ ...EMPTY_PESSOA });
