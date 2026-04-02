@@ -84,13 +84,6 @@ let usuariosCachePromise: Promise<UsuarioExterno[]> | null = null;
 
 const SUPABASE_PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID || "hzhxrkurljrogxtzxmmb";
 const OWN_FUNCTIONS_URL = `https://${SUPABASE_PROJECT_ID}.supabase.co/functions/v1`;
-const EXTERNAL_FUNCTIONS_URL = "https://yvdfdmyusdhgtzfguxbj.supabase.co/functions/v1";
-const EXTERNAL_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl2ZGZkbXl1c2RoZ3R6Zmd1eGJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0OTg4MzksImV4cCI6MjA4OTA3NDgzOX0.-xSNbj5kLibkhJoXmOXjfmYPKBB-gqasQgy322Kk-n4";
-const EXTERNAL_FUNCTIONS_HEADERS = {
-  "Content-Type": "application/json",
-  apikey: EXTERNAL_SUPABASE_ANON_KEY,
-  Authorization: `Bearer ${EXTERNAL_SUPABASE_ANON_KEY}`,
-};
 const OWN_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 const OWN_FUNCTIONS_HEADERS = {
   "Content-Type": "application/json",
@@ -103,48 +96,19 @@ async function fetchAllUsuariosExternos(): Promise<UsuarioExterno[]> {
   if (usuariosCachePromise) return usuariosCachePromise;
 
   usuariosCachePromise = (async () => {
-    // Tentar endpoint unificado via proxy próprio
-    try {
-      const r = await fetch(`${OWN_FUNCTIONS_URL}/listar-usuarios-externos`, {
-        method: "GET",
-        headers: OWN_FUNCTIONS_HEADERS,
-      });
-      if (r.ok) {
-        const data = await r.json();
-        if (Array.isArray(data) && data.length > 0) {
-          usuariosCacheGlobal = data as UsuarioExterno[];
-          usuariosCachePromise = null;
-          return usuariosCacheGlobal;
-        }
-      }
-    } catch { /* fallback below */ }
-
-    // Fallback: buscar suplentes + lideranças separadamente (endpoints que já funcionam)
-    const [suplData, lidData] = await Promise.all([
-      fetch(`${EXTERNAL_FUNCTIONS_URL}/buscar-suplentes`, { method: "GET", headers: EXTERNAL_FUNCTIONS_HEADERS }).then(r => r.ok ? r.json() : []).catch(() => []),
-      fetch(`${EXTERNAL_FUNCTIONS_URL}/buscar-liderancas-externo`, { method: "GET", headers: EXTERNAL_FUNCTIONS_HEADERS }).then(r => r.ok ? r.json() : []).catch(() => []),
-    ]);
-
-    const result: UsuarioExterno[] = [];
-    if (Array.isArray(suplData)) {
-      suplData.forEach((s: any) => result.push({
-        id: s.id, nome: s.nome, tipo: "suplente", tag: "Suplente",
-        subtitulo: [s.partido, s.regiao_atuacao].filter(Boolean).join(" · "),
-        municipio: s.regiao_atuacao, fonte: "externo",
-      }));
+    const r = await fetch(`${OWN_FUNCTIONS_URL}/listar-usuarios-externos`, {
+      method: "GET",
+      headers: OWN_FUNCTIONS_HEADERS,
+    });
+    if (!r.ok) throw new Error(`Status ${r.status}`);
+    const data = await r.json();
+    if (Array.isArray(data)) {
+      usuariosCacheGlobal = data as UsuarioExterno[];
+      return usuariosCacheGlobal;
     }
-    if (Array.isArray(lidData)) {
-      lidData.forEach((l: any) => result.push({
-        id: l.id, nome: l.nome, tipo: "lideranca_cadastrada", tag: "Liderança",
-        subtitulo: l.regiao_atuacao || l.regiao || "",
-        municipio: l.regiao_atuacao || l.regiao, fonte: "externo",
-      }));
-    }
-    result.sort((a, b) => (a.nome || "").localeCompare(b.nome || ""));
-    usuariosCacheGlobal = result;
-    usuariosCachePromise = null;
-    return result;
-  })().catch(() => {
+    return [] as UsuarioExterno[];
+  })().catch((err) => {
+    console.error("[fetchUsuarios] Erro:", err);
     usuariosCachePromise = null;
     return [] as UsuarioExterno[];
   });
