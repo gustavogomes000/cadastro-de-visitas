@@ -47,7 +47,7 @@ export default function Login() {
   const { signIn } = useAuth();
   
   const [username, setUsername] = useState(() => localStorage.getItem("saved_user") || "");
-  const [password, setPassword] = useState(() => localStorage.getItem("saved_pass") || "");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
