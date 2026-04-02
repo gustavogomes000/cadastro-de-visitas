@@ -539,7 +539,79 @@ export default function NovaVisita() {
         </div>
       )}
 
-      {pessoaStatus === "found" && (
+      {/* CPF Field — always visible */}
+      <div className="card-section mb-4 animate-fade-in">
+        <div className="space-y-1.5">
+          <label className="text-xs font-bold text-foreground">CPF *</label>
+          <div className="relative">
+            <input
+              type="text"
+              inputMode="numeric"
+              value={cpfInput}
+              onChange={(e) => handleCpfInput(e.target.value)}
+              placeholder="000.000.000-00"
+              disabled={pessoaId ? true : false}
+              className={cn(
+                "w-full h-12 rounded-lg bg-background border border-border px-4 text-sm outline-none focus:ring-2 focus:ring-primary/30 transition-shadow placeholder:text-muted-foreground/50",
+                pessoaId && "opacity-60 bg-muted"
+              )}
+            />
+            {searching && <Loader2 size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground animate-spin" />}
+            {cpfChecked && !searching && pessoaStatus !== "idle" && (
+              <button type="button" onClick={clearSearch} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                <X size={14} />
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Duplicate person dialog */}
+      {showDuplicateDialog && pessoaStatus === "found" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowDuplicateDialog(false)}>
+          <div className="bg-card rounded-2xl shadow-2xl max-w-sm w-full p-6 space-y-4 animate-fade-in" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-amber-500/15 flex items-center justify-center">
+                <span className="text-lg">⚠️</span>
+              </div>
+              <div>
+                <p className="text-base font-bold">Pessoa já cadastrada</p>
+                <p className="text-xs text-muted-foreground">Este CPF já existe no sistema</p>
+              </div>
+            </div>
+            <div className="p-3 rounded-lg bg-muted/50 border border-border">
+              <p className="text-sm font-bold">{pessoa.nome}</p>
+              {pessoa.whatsapp && <p className="text-xs text-muted-foreground">WhatsApp: {pessoa.whatsapp}</p>}
+              {pessoa.municipio && <p className="text-xs text-muted-foreground">{pessoa.municipio}{pessoa.uf ? ` - ${pessoa.uf}` : ""}</p>}
+              {visitHistory.length > 0 && (
+                <p className="text-xs text-primary font-semibold mt-1">📋 {visitHistory.length} visita{visitHistory.length !== 1 ? "s" : ""} registrada{visitHistory.length !== 1 ? "s" : ""}</p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <button
+                onClick={() => { setShowDuplicateDialog(false); setShowForm(true); }}
+                className="w-full h-11 rounded-lg font-bold text-white gradient-primary active:scale-[0.98] transition-transform text-sm"
+              >
+                Registrar nova visita
+              </button>
+              <button
+                onClick={() => { setShowDuplicateDialog(false); navigate(`/pessoa/${existingPessoaId}`); }}
+                className="w-full h-10 rounded-lg text-sm text-primary font-semibold border border-primary/30 hover:bg-primary/5 active:scale-95 transition"
+              >
+                Ver cadastro completo
+              </button>
+              <button
+                onClick={() => { setShowDuplicateDialog(false); clearSearch(); }}
+                className="w-full h-9 rounded-lg text-xs text-muted-foreground active:scale-95 transition"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pessoaStatus === "found" && !showDuplicateDialog && showForm && (
         <div className="card-section mb-4 animate-fade-in">
           <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
             <CheckCircle2 size={18} className="text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
@@ -551,7 +623,7 @@ export default function NovaVisita() {
         </div>
       )}
 
-      {pessoaStatus === "found" && visitHistory.length > 0 && (
+      {pessoaStatus === "found" && !showDuplicateDialog && showForm && visitHistory.length > 0 && (
         <div className="card-section mb-4 animate-fade-in">
           <p className="text-sm font-bold text-primary uppercase tracking-wide mb-2">
             📋 Histórico ({visitHistory.length} visita{visitHistory.length !== 1 ? "s" : ""})
