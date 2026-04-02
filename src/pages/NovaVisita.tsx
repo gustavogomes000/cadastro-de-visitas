@@ -290,7 +290,7 @@ export default function NovaVisita() {
         toast({ title: "CPF inválido", variant: "destructive" });
         return;
       }
-      const { data: existente } = await supabase.from("pessoas").select("*").eq("cpf", raw).maybeSingle();
+      const { data: existente } = await supabase.from("pessoas").select("*").eq("cpf", raw).neq("origem", "DESATIVADO").maybeSingle();
       if (existente && existente.id !== existingPessoaId) {
         navigate(`/nova-visita-existente/${existente.id}`);
       }
