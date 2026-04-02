@@ -237,8 +237,7 @@ export default function NovaVisita() {
       setPessoaStatus("found");
       setLocked(true);
       setShowForm(true);
-      setCpfInput(data.cpf && !data.cpf.startsWith("TEMP") ? maskCPF(data.cpf) : "");
-      setCpfChecked(true);
+      setSearchInput(data.cpf && !data.cpf.startsWith("TEMP") ? maskCPF(data.cpf) : data.nome || "");
       loadVisitHistory(id);
     }
   }
