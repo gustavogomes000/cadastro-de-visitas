@@ -12,8 +12,29 @@ Deno.serve(async (req) => {
 
   try {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+    const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
+    // Verify auth
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return new Response(JSON.stringify({ error: "Não autorizado" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const authClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const token = authHeader.replace("Bearer ", "");
+    const { data: claimsData, error: claimsError } = await authClient.auth.getUser(token);
+    if (claimsError || !claimsData?.user) {
+      return new Response(JSON.stringify({ error: "Sessão inválida" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Use service role for queries (bypasses RLS)
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     const [suplRes, lidRes, fiscRes, adminRes, usuariosRes] = await Promise.all([
@@ -26,33 +47,28 @@ Deno.serve(async (req) => {
 
     const result: any[] = [];
 
-    // Suplentes
     (suplRes.data || []).forEach((s: any) => result.push({
       id: s.id, nome: s.nome, tipo: "suplente", tag: "Suplente",
       subtitulo: [s.partido, s.regiao_atuacao].filter(Boolean).join(" · "),
       municipio: s.regiao_atuacao || "", fonte: "local",
     }));
 
-    // Lideranças
     (lidRes.data || []).forEach((l: any) => result.push({
       id: l.id, nome: l.nome, tipo: "lideranca_cadastrada", tag: "Liderança",
       subtitulo: [l.ligacao_politica, l.regiao].filter(Boolean).join(" · "),
       municipio: l.regiao || "", fonte: "local",
     }));
 
-    // Fiscais
     (fiscRes.data || []).forEach((f: any) => result.push({
       id: f.id, nome: f.nome, tipo: "fiscal_cadastrado", tag: "Fiscal",
       subtitulo: "", municipio: "", fonte: "local",
     }));
 
-    // Administrativo
     (adminRes.data || []).forEach((a: any) => result.push({
       id: a.id, nome: a.nome, tipo: "coordenador", tag: "Coordenador",
       subtitulo: "", municipio: "", fonte: "local",
     }));
 
-    // Usuários do sistema + roles
     if (usuariosRes.data && usuariosRes.data.length > 0) {
       const userIds = usuariosRes.data.map((u: any) => u.user_id);
       const { data: roles } = await supabase
@@ -74,7 +90,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Deduplicate by nome (keep first occurrence)
+    // Deduplicate by nome
     const seen = new Set<string>();
     const unique = result.filter(r => {
       const key = (r.nome || "").toLowerCase().trim();
