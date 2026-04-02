@@ -180,28 +180,40 @@ export default function NovaVisita() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  // Nome autocomplete search
+  // Pré-carrega pessoas para busca local instantânea
+  useEffect(() => {
+    if (pessoasCacheLoaded.current) return;
+    pessoasCacheLoaded.current = true;
+    supabase
+      .from("pessoas")
+      .select("id, nome, cpf, municipio, uf, whatsapp, origem")
+      .or("origem.is.null,origem.neq.DESATIVADO")
+      .order("nome")
+      .limit(500)
+      .then(({ data }) => {
+        pessoasCacheRef.current = data || [];
+      });
+  }, []);
+
+  // Nome autocomplete search — busca local instantânea
   const handleNomeInput = (value: string) => {
     setPessoa(prev => ({ ...prev, nome: value }));
-    const termo = value.trim();
+    const termo = value.trim().toLowerCase();
     if (termo.length < 2) {
       setNomeSugestoes([]);
       setNomeDropdownAberto(false);
       return;
     }
-    if (nomeDebounceRef.current) clearTimeout(nomeDebounceRef.current);
-    setNomeBuscando(true);
-    nomeDebounceRef.current = setTimeout(async () => {
-      const { data } = await supabase
-        .from("pessoas")
-        .select("id, nome, cpf, municipio, uf, whatsapp")
-        .or("origem.is.null,origem.neq.DESATIVADO")
-        .ilike("nome", `%${termo}%`)
-        .limit(8);
-      setNomeSugestoes(data || []);
-      setNomeDropdownAberto(true);
-      setNomeBuscando(false);
-    }, 150);
+    const words = termo.split(/\s+/);
+    const results = pessoasCacheRef.current
+      .filter(p => {
+        const nome = (p.nome || "").toLowerCase();
+        return words.every(w => nome.includes(w));
+      })
+      .slice(0, 8);
+    setNomeSugestoes(results);
+    setNomeDropdownAberto(true);
+    setNomeBuscando(false);
   };
 
   const allUsuariosRef = useRef<UsuarioExterno[]>([]);
