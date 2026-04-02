@@ -407,6 +407,11 @@ export default function NovaVisita() {
   };
 
   const handleSave = async () => {
+    const rawCpf = unmaskCPF(cpfInput);
+    if (rawCpf.length !== 11 || !validateCPF(rawCpf)) {
+      toast({ title: "CPF obrigatório e válido", variant: "destructive" });
+      return;
+    }
     if (!pessoa.nome && formMode === "full") {
       toast({ title: "Nome obrigatório", variant: "destructive" });
       return;
