@@ -302,8 +302,8 @@ export default function Login() {
 
         {/* ── Card with animated border ── */}
         <div className="relative rounded-2xl p-[2px] animate-border-glow">
-          <div className="bg-white/80 backdrop-blur-md rounded-2xl p-5 sm:p-8">
-            <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5">
+          <div className="bg-white/80 backdrop-blur-md rounded-2xl p-4 sm:p-8">
+            <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-5">
               {error && (
                 <div className="text-sm text-red-600 bg-red-50 rounded-lg p-3 text-center">{error}</div>
               )}
