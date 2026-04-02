@@ -319,7 +319,7 @@ export default function NovaVisita() {
         setSearching(false);
         return;
       }
-      const { data: existente } = await supabase.from("pessoas").select("*").eq("cpf", raw.slice(0, 11)).maybeSingle();
+      const { data: existente } = await supabase.from("pessoas").select("*").eq("cpf", raw.slice(0, 11)).neq("origem", "DESATIVADO").maybeSingle();
       if (existente) {
         navigate(`/nova-visita-existente/${existente.id}`);
         setSearching(false);
