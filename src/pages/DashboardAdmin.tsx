@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { AppLayout } from "@/components/AppLayout";
-import { Search, ChevronRight, Users, Trophy, CalendarDays, BarChart3 } from "lucide-react";
+import { Search, ChevronRight, Users, Trophy, CalendarDays, BarChart3, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDateTime } from "@/lib/masks";
 import {
