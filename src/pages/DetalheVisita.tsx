@@ -143,7 +143,6 @@ export default function DetalheVisita() {
           <InfoRow label="Descrição" value={visita.descricao_assunto} />
           <InfoRow label="Quem indicou" value={visita.quem_indicou} />
           <InfoRow label="Como chegou" value={visita.origem_visita} />
-          <InfoRow label="Observações" value={visita.observacoes} />
           <InfoRow label="Cadastrado por" value={visita.cadastrado_por} />
         </div>
 

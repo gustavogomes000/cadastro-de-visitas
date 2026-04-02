@@ -70,9 +70,6 @@ export default function EditarVisita() {
   const [descricao, setDescricao] = useState("");
   const [quemIndicou, setQuemIndicou] = useState("");
   const [origemVisita, setOrigemVisita] = useState("");
-  const [status, setStatus] = useState("");
-  const [responsavel, setResponsavel] = useState("");
-  const [observacoes, setObservacoes] = useState("");
   const [nomePessoa, setNomePessoa] = useState("");
 
   // Indicador autocomplete states

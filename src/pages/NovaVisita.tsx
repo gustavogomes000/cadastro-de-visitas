@@ -54,9 +54,6 @@ interface DadosVisita {
   indicador_id: string | null;
   indicador_nome: string | null;
   origem_visita: string;
-  status: string;
-  responsavel_tratativa: string;
-  observacoes: string;
 }
 
 function getTagColor(tipo: string): string {
