@@ -16,10 +16,13 @@ export default function PessoasPage() {
   }, []);
 
   async function fetchPessoas() {
-    const { data } = await supabase
+    const query = supabase
       .from("pessoas")
       .select("*, visitas(id, data_hora)")
       .order("nome");
+    // @ts-ignore – coluna ativo adicionada via migration
+    query.neq("ativo", false);
+    const { data } = await query;
     setPessoas(data || []);
     setLoading(false);
   }

@@ -2,13 +2,15 @@ import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { AppLayout } from "@/components/AppLayout";
-import { ArrowLeft, Plus, Pencil, Calendar, ChevronDown } from "lucide-react";
+import { ArrowLeft, Plus, Pencil, Calendar, ChevronDown, EyeOff } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import { formatDateTime } from "@/lib/masks";
 import { cn } from "@/lib/utils";
 
 export default function PessoaDetalhePage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [pessoa, setPessoa] = useState<any>(null);
   const [visitas, setVisitas] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -127,6 +129,25 @@ export default function PessoaDetalhePage() {
             </div>
           )}
         </div>
+
+        {/* Botão desativar */}
+        <button
+          onClick={async () => {
+            if (!confirm("Deseja desativar esta pessoa? Ela não será excluída, apenas ocultada.")) return;
+            // @ts-ignore – coluna ativo adicionada via migration
+            const { error } = await supabase.from("pessoas").update({ ativo: false } as any).eq("id", id);
+            if (error) {
+              toast({ title: "Erro ao desativar", description: error.message, variant: "destructive" });
+            } else {
+              toast({ title: "Pessoa desativada com sucesso" });
+              navigate("/pessoas");
+            }
+          }}
+          className="w-full h-11 rounded-lg text-sm font-semibold text-destructive border border-destructive/30 hover:bg-destructive/5 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+        >
+          <EyeOff size={16} />
+          Desativar pessoa
+        </button>
       </div>
     </AppLayout>
   );
