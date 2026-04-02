@@ -1,6 +1,8 @@
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-api-token",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
 Deno.serve(async (req) => {
@@ -9,40 +11,86 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const EXTERNAL_URL = Deno.env.get("EXTERNAL_SUPABASE_URL");
-    const EXTERNAL_KEY = Deno.env.get("EXTERNAL_SUPABASE_SERVICE_KEY");
-    // Also try the alternate secret name
-    const EXTERNO_KEY = Deno.env.get("EXTERNO_SUPABASE_SERVICE_ROLE_KEY");
-    const TOKEN = EXTERNAL_KEY || EXTERNO_KEY;
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    if (!EXTERNAL_URL || !TOKEN) {
-      return new Response(
-        JSON.stringify({ error: "Secrets não configurados", hasUrl: !!EXTERNAL_URL, hasKey: !!TOKEN }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    const [suplRes, lidRes, fiscRes, adminRes, usuariosRes] = await Promise.all([
+      supabase.from("suplentes").select("id, nome, partido, regiao_atuacao"),
+      supabase.from("liderancas").select("id, nome, ligacao_politica, regiao"),
+      supabase.from("fiscais").select("id, nome"),
+      supabase.from("administrativo").select("id, nome"),
+      supabase.from("usuarios").select("id, user_id, nome_usuario, email"),
+    ]);
+
+    const result: any[] = [];
+
+    // Suplentes
+    (suplRes.data || []).forEach((s: any) => result.push({
+      id: s.id, nome: s.nome, tipo: "suplente", tag: "Suplente",
+      subtitulo: [s.partido, s.regiao_atuacao].filter(Boolean).join(" · "),
+      municipio: s.regiao_atuacao || "", fonte: "local",
+    }));
+
+    // Lideranças
+    (lidRes.data || []).forEach((l: any) => result.push({
+      id: l.id, nome: l.nome, tipo: "lideranca_cadastrada", tag: "Liderança",
+      subtitulo: [l.ligacao_politica, l.regiao].filter(Boolean).join(" · "),
+      municipio: l.regiao || "", fonte: "local",
+    }));
+
+    // Fiscais
+    (fiscRes.data || []).forEach((f: any) => result.push({
+      id: f.id, nome: f.nome, tipo: "fiscal_cadastrado", tag: "Fiscal",
+      subtitulo: "", municipio: "", fonte: "local",
+    }));
+
+    // Administrativo
+    (adminRes.data || []).forEach((a: any) => result.push({
+      id: a.id, nome: a.nome, tipo: "coordenador", tag: "Coordenador",
+      subtitulo: "", municipio: "", fonte: "local",
+    }));
+
+    // Usuários do sistema + roles
+    if (usuariosRes.data && usuariosRes.data.length > 0) {
+      const userIds = usuariosRes.data.map((u: any) => u.user_id);
+      const { data: roles } = await supabase
+        .from("user_roles")
+        .select("user_id, role")
+        .in("user_id", userIds);
+
+      const roleMap: Record<string, string> = {};
+      (roles || []).forEach((r: any) => { roleMap[r.user_id] = r.role; });
+
+      usuariosRes.data.forEach((u: any) => {
+        const role = roleMap[u.user_id] || "recepcao";
+        const tipo = role === "admin" ? "super_admin" : role;
+        const tag = role === "admin" ? "Super Admin" : role === "recepcao" ? "Recepção" : role;
+        result.push({
+          id: u.id, nome: u.nome_usuario, tipo, tag,
+          subtitulo: u.email, municipio: "", fonte: "local",
+        });
+      });
     }
 
-    console.log("Calling external endpoint:", `${EXTERNAL_URL}/functions/v1/listar-usuarios-externos`);
-
-    // Try with x-api-token header
-    const response = await fetch(`${EXTERNAL_URL}/functions/v1/listar-usuarios-externos`, {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-token": TOKEN,
-        "Authorization": `Bearer ${TOKEN}`,
-        "apikey": TOKEN,
-      },
+    // Deduplicate by nome (keep first occurrence)
+    const seen = new Set<string>();
+    const unique = result.filter(r => {
+      const key = (r.nome || "").toLowerCase().trim();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
     });
 
-    const data = await response.text();
-    console.log("External response status:", response.status, "body preview:", data.substring(0, 200));
+    unique.sort((a, b) => (a.nome || "").localeCompare(b.nome || ""));
 
-    return new Response(data, {
-      status: response.status,
+    return new Response(JSON.stringify(unique), {
+      status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
+    console.error("Erro:", error);
     return new Response(
       JSON.stringify({ error: error.message }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
