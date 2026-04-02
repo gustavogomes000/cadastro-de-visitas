@@ -162,8 +162,8 @@ export default function NovaVisita() {
 
   // Indicador states
   const [indicadorBusca, setIndicadorBusca] = useState("");
-  const [indicadorSelecionado, setIndicadorSelecionado] = useState<{ id: string; nome: string; tipo: IndicadorTipo } | null>(null);
-  const [indicadorResultados, setIndicadorResultados] = useState<IndicadorResultados>(createEmptyIndicadorResultados);
+  const [indicadorSelecionado, setIndicadorSelecionado] = useState<UsuarioExterno | null>(null);
+  const [indicadorResultados, setIndicadorResultados] = useState<UsuarioExterno[]>([]);
   const [indicadorBuscando, setIndicadorBuscando] = useState(false);
   const [indicadorDropdownAberto, setIndicadorDropdownAberto] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -175,7 +175,7 @@ export default function NovaVisita() {
   const [visita, setVisita] = useState<DadosVisita>({
     data_hora: getBrasiliaDateTime(),
     assunto: "", descricao_assunto: "", quem_indicou: "",
-    indicador_tipo: null, indicador_id: null,
+    indicador_tipo: null, indicador_id: null, indicador_nome: null,
     origem_visita: "", status: "Aguardando",
     responsavel_tratativa: "", observacoes: "",
     tipo_visitante: "",
@@ -192,10 +192,10 @@ export default function NovaVisita() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  // Preload indicadores on mount
-  const allIndicadoresRef = useRef<IndicadorResultados>(createEmptyIndicadorResultados());
+  // Preload usuarios on mount
+  const allUsuariosRef = useRef<UsuarioExterno[]>([]);
   useEffect(() => {
-    fetchAllIndicadores().then(data => { allIndicadoresRef.current = data; });
+    fetchAllUsuariosExternos().then(data => { allUsuariosRef.current = data; });
   }, []);
 
   useEffect(() => {
