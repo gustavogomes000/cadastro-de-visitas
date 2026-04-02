@@ -504,13 +504,14 @@ export default function NovaVisita() {
             headers,
             body: JSON.stringify(cadastroPayload),
           }).then(r => r.json()).then(data => {
-          if (data.sucesso) {
-            toast({ title: "🔗 Sincronizado!", description: `${pessoa.nome} cadastrado(a) no sistema principal.` });
-          } else if (data.aviso) {
-            toast({ title: "ℹ️ Aviso", description: data.aviso });
-          }
-        }).catch(err => {
-          console.error("Erro na sincronização:", err);
+            if (data.sucesso) {
+              toast({ title: "🔗 Sincronizado!", description: `${pessoa.nome} cadastrado(a) no sistema principal.` });
+            } else if (data.aviso) {
+              toast({ title: "ℹ️ Aviso", description: data.aviso });
+            }
+          }).catch(err => {
+            console.error("Erro na sincronização:", err);
+          });
         });
       }
 
