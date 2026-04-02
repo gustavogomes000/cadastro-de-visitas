@@ -185,12 +185,13 @@ export default function NovaVisita() {
     nomeDebounceRef.current = setTimeout(async () => {
       const { data } = await supabase
         .from("pessoas")
-        .select("id, nome, municipio, uf")
+        .select("id, nome, cpf, municipio, uf, whatsapp")
         .neq("origem", "DESATIVADO")
         .ilike("nome", `%${termo}%`)
+        .order("nome")
         .limit(8);
       setNomeSugestoes(data || []);
-      setNomeDropdownAberto((data || []).length > 0);
+      setNomeDropdownAberto(true);
       setNomeBuscando(false);
     }, 300);
   };
