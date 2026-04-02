@@ -633,18 +633,22 @@ const Hyperspeed = ({ effectOptions = DEFAULT_EFFECT_OPTIONS }: { effectOptions?
       }
       tick() {
         if (this.disposed) return;
-        if (!this.hasValidSize) {
-          const w = this.container.offsetWidth; const h = this.container.offsetHeight;
-          if (w > 0 && h > 0) {
-            this.renderer.setSize(w, h, false); this.camera.aspect = w / h;
-            this.camera.updateProjectionMatrix(); this.composer.setSize(w, h); this.hasValidSize = true;
-          } else { requestAnimationFrame(this.tick); return; }
+        try {
+          if (!this.hasValidSize) {
+            const w = this.container.offsetWidth; const h = this.container.offsetHeight;
+            if (w > 0 && h > 0) {
+              this.renderer.setSize(w, h, false); this.camera.aspect = w / h;
+              this.camera.updateProjectionMatrix(); this.composer.setSize(w, h); this.hasValidSize = true;
+            } else { requestAnimationFrame(this.tick); return; }
+          }
+          if (resizeRendererToDisplaySize(this.renderer, this.setSize)) {
+            const canvas = this.renderer.domElement;
+            if (this.hasValidSize) { this.camera.aspect = canvas.clientWidth / canvas.clientHeight; this.camera.updateProjectionMatrix(); }
+          }
+          if (this.hasValidSize) { const delta = this.clock.getDelta(); this.render(delta); this.update(delta); }
+        } catch (err) {
+          console.warn("[Hyperspeed] render error:", err);
         }
-        if (resizeRendererToDisplaySize(this.renderer, this.setSize)) {
-          const canvas = this.renderer.domElement;
-          if (this.hasValidSize) { this.camera.aspect = canvas.clientWidth / canvas.clientHeight; this.camera.updateProjectionMatrix(); }
-        }
-        if (this.hasValidSize) { const delta = this.clock.getDelta(); this.render(delta); this.update(delta); }
         requestAnimationFrame(this.tick);
       }
     }
