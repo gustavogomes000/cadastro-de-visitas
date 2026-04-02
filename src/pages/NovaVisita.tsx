@@ -258,15 +258,7 @@ export default function NovaVisita() {
       }
       const { data: existente } = await supabase.from("pessoas").select("*").eq("cpf", raw).maybeSingle();
       if (existente && existente.id !== existingPessoaId) {
-        setDuplicatePessoa(existente);
-        const { data: visits } = await supabase
-          .from("visitas")
-          .select("id, data_hora, assunto, status")
-          .eq("pessoa_id", existente.id)
-          .order("data_hora", { ascending: false })
-          .limit(5);
-        setVisitHistory(visits || []);
-        setShowDuplicateDialog(true);
+        navigate(`/nova-visita-existente/${existente.id}`);
       }
     }
   };
