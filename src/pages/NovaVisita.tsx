@@ -140,7 +140,7 @@ export default function NovaVisita() {
   const indicadorContainerRef = useRef<HTMLDivElement>(null);
 
   // Nome autocomplete states
-  const [nomeSugestoes, setNomeSugestoes] = useState<{ id: string; nome: string; municipio?: string; uf?: string }[]>([]);
+  const [nomeSugestoes, setNomeSugestoes] = useState<{ id: string; nome: string; cpf?: string; municipio?: string; uf?: string; whatsapp?: string }[]>([]);
   const [nomeBuscando, setNomeBuscando] = useState(false);
   const [nomeDropdownAberto, setNomeDropdownAberto] = useState(false);
   const nomeContainerRef = useRef<HTMLDivElement>(null);
