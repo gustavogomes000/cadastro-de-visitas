@@ -330,13 +330,13 @@ export default function NovaVisita() {
     setVisitHistory([]);
     setIndicadorBusca("");
     setIndicadorSelecionado(null);
-    setIndicadorResultados(createEmptyIndicadorResultados());
+    setIndicadorResultados([]);
     setIndicadorBuscando(false);
     setIndicadorDropdownAberto(false);
     setVisita({
       data_hora: getBrasiliaDateTime(),
       assunto: "", descricao_assunto: "", quem_indicou: "",
-      indicador_tipo: null, indicador_id: null,
+      indicador_tipo: null, indicador_id: null, indicador_nome: null,
       origem_visita: "", status: "Aguardando",
       responsavel_tratativa: "", observacoes: "",
       tipo_visitante: "",
