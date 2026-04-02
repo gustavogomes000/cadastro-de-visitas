@@ -295,7 +295,28 @@ export default function NovaVisita() {
     if (raw.length > 11) return;
     setPessoa(prev => ({ ...prev, cpf: raw }));
 
+    // Search by partial CPF (at least 3 digits)
+    if (raw.length >= 3 && raw.length < 11) {
+      if (cpfDebounceRef.current) clearTimeout(cpfDebounceRef.current);
+      cpfDebounceRef.current = setTimeout(async () => {
+        const { data } = await supabase
+          .from("pessoas")
+          .select("id, nome, cpf, municipio")
+          .neq("origem", "DESATIVADO")
+          .ilike("cpf", `${raw}%`)
+          .order("nome")
+          .limit(5);
+        setCpfSugestoes(data || []);
+        setCpfDropdownAberto((data || []).length > 0);
+      }, 300);
+    } else {
+      setCpfSugestoes([]);
+      setCpfDropdownAberto(false);
+    }
+
     if (raw.length === 11) {
+      setCpfDropdownAberto(false);
+      setCpfSugestoes([]);
       if (!validateCPF(raw)) {
         toast({ title: "CPF inválido", variant: "destructive" });
         return;
