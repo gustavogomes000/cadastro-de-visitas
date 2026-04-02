@@ -342,7 +342,7 @@ export default function NovaVisita() {
       setLocked(true);
       setShowForm(true);
     } else {
-      const { data: matches } = await supabase.from("pessoas").select("*").ilike("nome", `%${trimmed}%`).limit(1);
+      const { data: matches } = await supabase.from("pessoas").select("*").neq("origem", "DESATIVADO").ilike("nome", `%${trimmed}%`).limit(1);
       if (matches && matches.length > 0) {
         fillPessoa(matches[0]);
         setExistingPessoaId(matches[0].id);
