@@ -703,7 +703,7 @@ export default function NovaVisita() {
               <p className="text-sm font-bold text-primary uppercase tracking-wide">Dados Pessoais</p>
             </div>
             <div className="space-y-4">
-              <InputField label="CPF *" value={maskCPF(pessoa.cpf)} onChange={(v) => handleCpfChange(v)} placeholder="000.000.000-00" />
+              <InputField label="CPF" value={maskCPF(pessoa.cpf)} onChange={(v) => handleCpfChange(v)} placeholder="000.000.000-00" />
               <InputField label="Nome completo *" value={pessoa.nome} onChange={(v) => setPessoa({ ...pessoa, nome: v })} placeholder="Nome completo" />
               <InputField label="WhatsApp" value={pessoa.whatsapp} onChange={(v) => setPessoa({ ...pessoa, whatsapp: maskPhone(v) })} placeholder="(00) 00000-0000" />
               <InputField label="Rede social (Instagram ou Facebook)" value={pessoa.instagram} onChange={(v) => setPessoa({ ...pessoa, instagram: v })} placeholder="@usuario ou link" />
