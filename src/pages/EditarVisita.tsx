@@ -1,10 +1,17 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { AppLayout } from "@/components/AppLayout";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeft, Loader2, Search, X } from "lucide-react";
 import { STATUS_OPTIONS } from "@/lib/constants";
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
+import {
+  fetchAllUsuariosExternos,
+  filterUsuariosExternos,
+  subscribeToUsuariosExternos,
+  type UsuarioExterno,
+} from "@/lib/indicadoresExternos";
 
 function getBrasiliaDateTime() {
   const now = new Date();
@@ -27,6 +34,20 @@ function toLocalDatetime(iso: string | null) {
   const h = String(brasilia.getHours()).padStart(2, "0");
   const min = String(brasilia.getMinutes()).padStart(2, "0");
   return `${y}-${m}-${day}T${h}:${min}`;
+}
+
+function getTagColor(tipo: string): string {
+  switch (tipo) {
+    case "suplente": return "bg-emerald-500/15 text-emerald-600";
+    case "super_admin":
+    case "coordenador": return "bg-purple-500/15 text-purple-600";
+    case "lideranca":
+    case "lideranca_cadastrada": return "bg-blue-500/15 text-blue-600";
+    case "fiscal":
+    case "fiscal_cadastrado": return "bg-orange-500/15 text-orange-600";
+    case "eleitor_cadastrado": return "bg-gray-500/15 text-gray-500";
+    default: return "bg-muted text-muted-foreground";
+  }
 }
 
 const Field = ({ label, children }: { label: string; children: React.ReactNode }) => (
@@ -55,6 +76,52 @@ export default function EditarVisita() {
   const [observacoes, setObservacoes] = useState("");
   const [nomePessoa, setNomePessoa] = useState("");
 
+  // Indicador autocomplete states
+  const [indicadorBusca, setIndicadorBusca] = useState("");
+  const [indicadorSelecionado, setIndicadorSelecionado] = useState<UsuarioExterno | null>(null);
+  const [indicadorResultados, setIndicadorResultados] = useState<UsuarioExterno[]>([]);
+  const [indicadorBuscando, setIndicadorBuscando] = useState(false);
+  const [indicadorDropdownAberto, setIndicadorDropdownAberto] = useState(false);
+  const indicadorContainerRef = useRef<HTMLDivElement>(null);
+  const allUsuariosRef = useRef<UsuarioExterno[]>([]);
+  const indicadorBuscaRef = useRef("");
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (indicadorContainerRef.current && !indicadorContainerRef.current.contains(e.target as Node)) {
+        setIndicadorDropdownAberto(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const refreshUsuariosExternos = useCallback(async (force = false) => {
+    try {
+      const data = await fetchAllUsuariosExternos({ force });
+      allUsuariosRef.current = data;
+      const termoAtual = indicadorBuscaRef.current.trim();
+      if (termoAtual.length >= 2) {
+        const filtrados = filterUsuariosExternos(data, termoAtual);
+        setIndicadorResultados(filtrados);
+        setIndicadorDropdownAberto((aberto) => aberto && filtrados.length > 0);
+      }
+    } catch (err) {
+      console.error("[EditarVisita] Erro ao carregar usuarios:", err);
+    } finally {
+      setIndicadorBuscando(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshUsuariosExternos(true);
+    const unsubscribe = subscribeToUsuariosExternos(() => {
+      void refreshUsuariosExternos(true);
+    }, "editar-visita");
+    return () => unsubscribe();
+  }, [refreshUsuariosExternos]);
+
   useEffect(() => {
     async function load() {
       try {
@@ -74,15 +141,65 @@ export default function EditarVisita() {
           setResponsavel(data.responsavel_tratativa || "");
           setObservacoes(data.observacoes || "");
           setNomePessoa(data.pessoas?.nome || "Visitante");
+          // Set initial indicador search text
+          if (data.quem_indicou) {
+            setIndicadorBusca(data.quem_indicou);
+            indicadorBuscaRef.current = data.quem_indicou;
+          }
         }
       } catch {
-        // handled silently — user sees empty form
+        // handled silently
       } finally {
         setLoading(false);
       }
     }
     load();
   }, [id]);
+
+  const handleIndicadorInput = (valor: string) => {
+    const termo = valor.trim();
+    indicadorBuscaRef.current = valor;
+    setIndicadorBusca(valor);
+    setIndicadorSelecionado(null);
+    setQuemIndicou(valor);
+
+    if (termo.length < 2) {
+      setIndicadorBuscando(false);
+      setIndicadorResultados([]);
+      setIndicadorDropdownAberto(false);
+      return;
+    }
+
+    const filtrados = filterUsuariosExternos(allUsuariosRef.current, termo);
+    setIndicadorResultados(filtrados);
+    setIndicadorDropdownAberto(true);
+
+    if (allUsuariosRef.current.length === 0 || filtrados.length === 0) {
+      setIndicadorBuscando(true);
+      void refreshUsuariosExternos(true);
+      return;
+    }
+    setIndicadorBuscando(false);
+  };
+
+  const selecionarIndicador = (item: UsuarioExterno) => {
+    setIndicadorBuscando(false);
+    setIndicadorSelecionado(item);
+    indicadorBuscaRef.current = item.nome;
+    setIndicadorBusca(item.nome);
+    setIndicadorDropdownAberto(false);
+    setQuemIndicou(item.nome);
+  };
+
+  const limparIndicador = () => {
+    setIndicadorBuscando(false);
+    setIndicadorSelecionado(null);
+    indicadorBuscaRef.current = "";
+    setIndicadorBusca("");
+    setQuemIndicou("");
+    setIndicadorResultados([]);
+    setIndicadorDropdownAberto(false);
+  };
 
   const handleSave = async () => {
     if (!assunto) {
@@ -111,7 +228,9 @@ export default function EditarVisita() {
     setSaving(false);
   };
 
-  if (loading) return <AppLayout><div className="card-section animate-pulse h-40" /></AppLayout>;
+  if (loading) {
+    return <AppLayout><div className="card-section animate-pulse h-32" /></AppLayout>;
+  }
 
   return (
     <AppLayout>
@@ -137,9 +256,61 @@ export default function EditarVisita() {
             <textarea value={descricao} onChange={(e) => setDescricao(e.target.value)} placeholder="Detalhes..." rows={3}
               className="w-full rounded-lg bg-background border border-border px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-primary/30 transition-shadow placeholder:text-muted-foreground/50 resize-none" />
           </Field>
-          <Field label="Quem indicou">
-            <input type="text" value={quemIndicou} onChange={(e) => setQuemIndicou(e.target.value)} placeholder="Nome" className={inputClass} />
-          </Field>
+
+          {/* Quem indicou — busca com autocomplete */}
+          <div className="space-y-1.5 relative" ref={indicadorContainerRef}>
+            <label className="text-xs font-bold text-foreground">Quem indicou (Suplente / Liderança)</label>
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <input
+                value={indicadorBusca}
+                onChange={(e) => handleIndicadorInput(e.target.value)}
+                onFocus={() => {
+                  if (indicadorBusca.trim().length >= 2 || indicadorResultados.length > 0) {
+                    setIndicadorDropdownAberto(true);
+                  }
+                  void refreshUsuariosExternos(true);
+                }}
+                placeholder="Buscar por nome..."
+                className="w-full h-12 rounded-lg bg-background border border-border pl-9 pr-10 text-sm outline-none focus:ring-2 focus:ring-primary/30 transition-shadow placeholder:text-muted-foreground/50"
+              />
+              {indicadorBuscando && (
+                <Loader2 size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground animate-spin" />
+              )}
+              {indicadorSelecionado && !indicadorBuscando && (
+                <button type="button" onClick={limparIndicador} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+
+            {indicadorSelecionado && (
+              <div className="flex items-center gap-1.5 mt-1">
+                <span className={cn("text-[10px] px-2 py-0.5 rounded-full font-semibold", getTagColor(indicadorSelecionado.tipo))}>
+                  {indicadorSelecionado.tag}
+                </span>
+                <span className="text-xs text-muted-foreground">{indicadorSelecionado.subtitulo || indicadorSelecionado.nome}</span>
+              </div>
+            )}
+
+            {indicadorDropdownAberto && indicadorResultados.length > 0 && (
+              <div className="absolute z-50 w-full mt-1 bg-card border border-border rounded-xl shadow-lg max-h-[280px] overflow-y-auto">
+                {indicadorResultados.map((u) => (
+                  <button key={`${u.id}-${u.tipo}`} type="button" onClick={() => selecionarIndicador(u)}
+                    className="w-full text-left px-3 py-2.5 hover:bg-muted flex items-center justify-between transition-colors cursor-pointer border-b border-border/30 last:border-0">
+                    <div>
+                      <span className="text-sm font-semibold">{u.nome}</span>
+                      {u.subtitulo && <p className="text-xs text-muted-foreground">{u.subtitulo}</p>}
+                    </div>
+                    <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-semibold flex-shrink-0", getTagColor(u.tipo))}>
+                      {u.tag}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
           <Field label="Origem da visita">
             <input type="text" value={origemVisita} onChange={(e) => setOrigemVisita(e.target.value)} placeholder="Como chegou" className={inputClass} />
           </Field>
