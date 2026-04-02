@@ -653,9 +653,15 @@ const Hyperspeed = ({ effectOptions = DEFAULT_EFFECT_OPTIONS }: { effectOptions?
     if (!container) return;
     const options = { ...DEFAULT_EFFECT_OPTIONS, ...effectOptions, colors: { ...DEFAULT_EFFECT_OPTIONS.colors, ...effectOptions.colors } };
     options.distortion = distortions[options.distortion as unknown as string];
-    const myApp = new App(container, options);
-    appRef.current = myApp;
-    myApp.loadAssets().then(myApp.init);
+    let myApp: App;
+    try {
+      myApp = new App(container, options);
+      appRef.current = myApp;
+      myApp.loadAssets().then(myApp.init).catch(err => console.warn("[Hyperspeed] init error:", err));
+    } catch (err) {
+      console.warn("[Hyperspeed] Failed to initialize:", err);
+      return;
+    }
     return () => { if (appRef.current) { appRef.current.dispose(); appRef.current = null; } };
   }, [effectOptions]);
 
