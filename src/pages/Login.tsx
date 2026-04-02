@@ -3,7 +3,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import candidataImg from "@/assets/candidata.jpg";
 import logoImg from "@/assets/Logo_Sarelli.png";
 
-const APP_TITLE = "Painel de Pagamentos";
+const APP_TITLE = "Cadastro de Visitas";
 
 /* ── Constellation / Network background ── */
 function ConstellationBg() {
@@ -285,17 +285,17 @@ export default function Login() {
     <div className="min-h-[100dvh] flex flex-col items-center sm:justify-center overflow-y-auto relative">
       <ConstellationBg />
 
-      <div className="w-full max-w-sm space-y-4 sm:space-y-5 relative z-10 px-4 py-8 sm:py-0">
+      <div className="w-full max-w-sm space-y-2 sm:space-y-3 relative z-10 px-4 py-6 sm:py-0">
         {/* ── Photo + Logo ── */}
         <div className="flex flex-col items-center">
           {/* Photo */}
-          <div className="w-[90px] h-[90px] sm:w-[110px] sm:h-[110px] rounded-full border-4 border-pink-400 overflow-hidden shadow-lg">
+          <div className="w-[70px] h-[70px] sm:w-[90px] sm:h-[90px] rounded-full border-[3px] border-pink-400 overflow-hidden shadow-lg">
             <img src={candidataImg} alt="Dra. Fernanda Sarelli" className="w-full h-full object-cover" loading="eager" />
           </div>
           {/* Logo overlapping */}
-          <img src={logoImg} alt="Logo Sarelli" className="h-36 sm:h-44 -mt-6 object-contain" />
+          <img src={logoImg} alt="Logo Sarelli" className="h-28 sm:h-36 -mt-4 object-contain" />
           {/* Subtitle */}
-          <p className="text-sm font-semibold tracking-widest uppercase mt-1" style={{ color: "#c8aa64" }}>
+          <p className="text-xs sm:text-sm font-semibold tracking-widest uppercase -mt-1" style={{ color: "#c8aa64" }}>
             {APP_TITLE}
           </p>
         </div>
