@@ -287,12 +287,7 @@ export default function NovaVisita() {
       }
       const { data: existente } = await supabase.from("pessoas").select("*").eq("cpf", raw.slice(0, 11)).maybeSingle();
       if (existente) {
-        fillPessoa(existente);
-        setExistingPessoaId(existente.id);
-        setPessoaStatus("found");
-        setLocked(true);
-        setShowForm(true);
-        loadVisitHistory(existente.id);
+        navigate(`/nova-visita-existente/${existente.id}`);
         setSearching(false);
         return;
       }
