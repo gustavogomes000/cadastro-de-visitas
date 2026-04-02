@@ -82,6 +82,22 @@ function getTagColor(tipo: string): string {
 let usuariosCacheGlobal: UsuarioExterno[] | null = null;
 let usuariosCachePromise: Promise<UsuarioExterno[]> | null = null;
 
+const SUPABASE_PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID || "hzhxrkurljrogxtzxmmb";
+const OWN_FUNCTIONS_URL = `https://${SUPABASE_PROJECT_ID}.supabase.co/functions/v1`;
+const EXTERNAL_FUNCTIONS_URL = "https://yvdfdmyusdhgtzfguxbj.supabase.co/functions/v1";
+const EXTERNAL_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl2ZGZkbXl1c2RoZ3R6Zmd1eGJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0OTg4MzksImV4cCI6MjA4OTA3NDgzOX0.-xSNbj5kLibkhJoXmOXjfmYPKBB-gqasQgy322Kk-n4";
+const EXTERNAL_FUNCTIONS_HEADERS = {
+  "Content-Type": "application/json",
+  apikey: EXTERNAL_SUPABASE_ANON_KEY,
+  Authorization: `Bearer ${EXTERNAL_SUPABASE_ANON_KEY}`,
+};
+const OWN_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+const OWN_FUNCTIONS_HEADERS = {
+  "Content-Type": "application/json",
+  apikey: OWN_ANON_KEY,
+  Authorization: `Bearer ${OWN_ANON_KEY}`,
+};
+
 async function fetchAllUsuariosExternos(): Promise<UsuarioExterno[]> {
   if (usuariosCacheGlobal) return usuariosCacheGlobal;
   if (usuariosCachePromise) return usuariosCachePromise;
