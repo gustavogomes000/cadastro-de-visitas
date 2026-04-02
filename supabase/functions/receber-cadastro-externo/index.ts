@@ -109,18 +109,20 @@ Deno.serve(async (req) => {
       insertedId = data.id;
     }
 
-    // Fire-and-forget: encaminhar para o app principal
+    // Fire-and-forget: encaminhar para o app principal de campanha
     const PRINCIPAL_TOKEN = Deno.env.get("CADASTRO_EXTERNO_TOKEN_PRINCIPAL");
     if (PRINCIPAL_TOKEN) {
       const forwardPayload = {
         tipo: tipo || "eleitor",
-        indicador_id: indicador_id,
-        indicador_tipo: indicador_tipo || "recepcao",
-        indicador_nome: indicador_nome || null,
         nome: cleanNome,
         cpf: cleanCpf,
         whatsapp: whatsapp || null,
         telefone: telefone || null,
+        indicador_nome: indicador_nome || null,
+        indicador_id: indicador_id || null,
+        indicador_tipo: indicador_tipo || "recepcao",
+        origem: "visita_comite",
+        observacoes: body.observacoes || null,
         email: email || null,
         zona_eleitoral: zona_eleitoral || null,
         secao_eleitoral: secao_eleitoral || null,
