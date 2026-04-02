@@ -53,6 +53,10 @@ export default function Login() {
   const [error, setError] = useState("");
   const [remember, setRemember] = useState(() => !!localStorage.getItem("saved_user"));
 
+  // Clean up any previously stored password
+  if (typeof window !== "undefined" && localStorage.getItem("saved_pass")) {
+    localStorage.removeItem("saved_pass");
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
