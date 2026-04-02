@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { AppLayout } from "@/components/AppLayout";
-import { Search, ChevronRight, Users } from "lucide-react";
+import { Search, ChevronRight, Users, Trophy, CalendarDays, BarChart3 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDateTime } from "@/lib/masks";
 import {
@@ -10,6 +10,7 @@ import {
   subscribeToUsuariosExternos,
   type UsuarioExterno,
 } from "@/lib/indicadoresExternos";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 
 interface VisitaComPessoa {
   id: string;
@@ -36,6 +37,31 @@ interface VisitaComPessoa {
 }
 
 type TabType = "todos" | "suplente" | "lideranca";
+type PeriodoType = "hoje" | "7dias" | "30dias" | "todos";
+
+const PERIODO_LABELS: Record<PeriodoType, string> = {
+  hoje: "Hoje",
+  "7dias": "7 dias",
+  "30dias": "30 dias",
+  todos: "Tudo",
+};
+
+function startOfDay(date: Date): Date {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function subDays(date: Date, days: number): Date {
+  const d = new Date(date);
+  d.setDate(d.getDate() - days);
+  return d;
+}
+
+function formatShortDate(dateStr: string): string {
+  const d = new Date(dateStr);
+  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
 
 export default function DashboardAdmin() {
   const navigate = useNavigate();
@@ -44,8 +70,8 @@ export default function DashboardAdmin() {
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>("todos");
+  const [periodo, setPeriodo] = useState<PeriodoType>("todos");
 
-  // External users for type matching
   const [externos, setExternos] = useState<UsuarioExterno[]>([]);
   const externosMapRef = useRef<Map<string, UsuarioExterno>>(new Map());
 
@@ -120,45 +146,106 @@ export default function DashboardAdmin() {
     }
   }
 
-  const filtered = visitas.filter((v) => {
-    // Tab filter
-    if (activeTab !== "todos") {
-      const tipo = getIndicadorTipo(v.quem_indicou);
-      if (activeTab === "suplente" && tipo !== "suplente") return false;
-      if (activeTab === "lideranca" && tipo !== "lideranca" && tipo !== "lideranca_cadastrada") return false;
-    }
-    // Search filter
-    if (!searchQuery) return true;
-    const q = searchQuery.toLowerCase();
-    return (
-      v.pessoas?.nome?.toLowerCase().includes(q) ||
-      v.quem_indicou?.toLowerCase().includes(q) ||
-      v.assunto?.toLowerCase().includes(q) ||
-      v.cadastrado_por?.toLowerCase().includes(q)
-    );
-  });
+  // Period filter
+  const visitasFiltradas = useMemo(() => {
+    const now = new Date();
+    const today = startOfDay(now);
 
-  // Counts per tab
-  const countSuplente = visitas.filter(v => getIndicadorTipo(v.quem_indicou) === "suplente").length;
-  const countLideranca = visitas.filter(v => { const t = getIndicadorTipo(v.quem_indicou); return t === "lideranca" || t === "lideranca_cadastrada"; }).length;
+    return visitas.filter((v) => {
+      if (periodo === "todos") return true;
+      if (!v.data_hora) return false;
+      const d = new Date(v.data_hora);
+      switch (periodo) {
+        case "hoje": return d >= today;
+        case "7dias": return d >= subDays(today, 7);
+        case "30dias": return d >= subDays(today, 30);
+        default: return true;
+      }
+    });
+  }, [visitas, periodo]);
 
-  const getStatusColor = (status: string | null) => {
-    switch (status) {
-      case "Aguardando": return "bg-yellow-500/15 text-yellow-600";
-      case "Em andamento": return "bg-blue-500/15 text-blue-600";
-      case "Resolvido": return "bg-emerald-500/15 text-emerald-600";
-      default: return "bg-muted text-muted-foreground";
+  const filtered = useMemo(() => {
+    return visitasFiltradas.filter((v) => {
+      if (activeTab !== "todos") {
+        const tipo = getIndicadorTipo(v.quem_indicou);
+        if (activeTab === "suplente" && tipo !== "suplente") return false;
+        if (activeTab === "lideranca" && tipo !== "lideranca" && tipo !== "lideranca_cadastrada") return false;
+      }
+      if (!searchQuery) return true;
+      const q = searchQuery.toLowerCase();
+      return (
+        v.pessoas?.nome?.toLowerCase().includes(q) ||
+        v.quem_indicou?.toLowerCase().includes(q) ||
+        v.assunto?.toLowerCase().includes(q) ||
+        v.cadastrado_por?.toLowerCase().includes(q)
+      );
+    });
+  }, [visitasFiltradas, activeTab, searchQuery]);
+
+  // Counts
+  const countSuplente = visitasFiltradas.filter(v => getIndicadorTipo(v.quem_indicou) === "suplente").length;
+  const countLideranca = visitasFiltradas.filter(v => { const t = getIndicadorTipo(v.quem_indicou); return t === "lideranca" || t === "lideranca_cadastrada"; }).length;
+
+  // Ranking de indicadores
+  const ranking = useMemo(() => {
+    const counts = new Map<string, { nome: string; tipo: string; count: number }>();
+    visitasFiltradas.forEach((v) => {
+      if (!v.quem_indicou) return;
+      const key = v.quem_indicou.toLowerCase().trim();
+      const existing = counts.get(key);
+      if (existing) {
+        existing.count++;
+      } else {
+        const tipo = getIndicadorTipo(v.quem_indicou);
+        counts.set(key, {
+          nome: v.quem_indicou,
+          tipo: tipo || "desconhecido",
+          count: 1,
+        });
+      }
+    });
+    return Array.from(counts.values())
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+  }, [visitasFiltradas]);
+
+  // Chart data — cadastros por dia (últimos N dias baseado no período)
+  const chartData = useMemo(() => {
+    const days = periodo === "hoje" ? 1 : periodo === "7dias" ? 7 : periodo === "30dias" ? 30 : 14;
+    const now = new Date();
+    const today = startOfDay(now);
+
+    const dayMap = new Map<string, number>();
+    for (let i = days - 1; i >= 0; i--) {
+      const d = subDays(today, i);
+      const key = d.toISOString().slice(0, 10);
+      dayMap.set(key, 0);
     }
-  };
+
+    visitasFiltradas.forEach((v) => {
+      if (!v.data_hora) return;
+      const key = v.data_hora.slice(0, 10);
+      if (dayMap.has(key)) {
+        dayMap.set(key, (dayMap.get(key) || 0) + 1);
+      }
+    });
+
+    return Array.from(dayMap.entries()).map(([date, count]) => ({
+      date,
+      label: formatShortDate(date),
+      cadastros: count,
+    }));
+  }, [visitasFiltradas, periodo]);
 
   const tabs: { key: TabType; label: string; count: number }[] = [
-    { key: "todos", label: "Todos", count: visitas.length },
+    { key: "todos", label: "Todos", count: visitasFiltradas.length },
     { key: "suplente", label: "Suplentes", count: countSuplente },
     { key: "lideranca", label: "Lideranças", count: countLideranca },
   ];
 
   return (
     <AppLayout>
+      {/* Header */}
       <div className="flex items-center gap-3 mb-4">
         <Users size={22} className="text-primary" />
         <h2 className="text-xl font-bold">Dashboard</h2>
@@ -166,6 +253,118 @@ export default function DashboardAdmin() {
           {filtered.length} cadastros
         </span>
       </div>
+
+      {/* Filtro de período */}
+      <div className="flex gap-1.5 mb-4 overflow-x-auto">
+        <CalendarDays size={14} className="text-muted-foreground mt-1.5 flex-shrink-0" />
+        {(Object.keys(PERIODO_LABELS) as PeriodoType[]).map((p) => (
+          <button
+            key={p}
+            onClick={() => setPeriodo(p)}
+            className={cn(
+              "px-3 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap",
+              periodo === p
+                ? "bg-primary/15 text-primary border border-primary/30"
+                : "text-muted-foreground hover:bg-muted"
+            )}
+          >
+            {PERIODO_LABELS[p]}
+          </button>
+        ))}
+      </div>
+
+      {/* Gráfico de cadastros por dia */}
+      {periodo !== "hoje" && chartData.length > 1 && (
+        <div className="card-section mb-4 animate-fade-in">
+          <div className="flex items-center gap-2 mb-3">
+            <BarChart3 size={14} className="text-primary" />
+            <p className="text-xs font-bold text-primary uppercase tracking-wide">Cadastros por dia</p>
+          </div>
+          <div className="h-[140px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis
+                  dataKey="label"
+                  tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <YAxis
+                  tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+                  axisLine={false}
+                  tickLine={false}
+                  allowDecimals={false}
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "hsl(var(--card))",
+                    border: "1px solid hsl(var(--border))",
+                    borderRadius: "8px",
+                    fontSize: "12px",
+                  }}
+                  labelFormatter={(label) => `Data: ${label}`}
+                  formatter={(value: number) => [`${value} cadastro${value !== 1 ? "s" : ""}`, ""]}
+                />
+                <Bar
+                  dataKey="cadastros"
+                  fill="hsl(var(--primary))"
+                  radius={[4, 4, 0, 0]}
+                  maxBarSize={32}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+
+      {/* Ranking de indicadores */}
+      {ranking.length > 0 && (
+        <div className="card-section mb-4 animate-fade-in">
+          <div className="flex items-center gap-2 mb-3">
+            <Trophy size={14} className="text-amber-500" />
+            <p className="text-xs font-bold text-primary uppercase tracking-wide">Top indicadores</p>
+          </div>
+          <div className="space-y-2">
+            {ranking.map((r, i) => {
+              const tag = getTagInfo(r.tipo);
+              const barWidth = ranking[0].count > 0 ? Math.max((r.count / ranking[0].count) * 100, 8) : 8;
+              return (
+                <div key={r.nome} className="flex items-center gap-2">
+                  <span className={cn(
+                    "w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0",
+                    i === 0 ? "bg-amber-500/20 text-amber-600" :
+                    i === 1 ? "bg-gray-300/30 text-gray-500" :
+                    i === 2 ? "bg-orange-400/20 text-orange-500" :
+                    "bg-muted text-muted-foreground"
+                  )}>
+                    {i + 1}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-semibold truncate">{r.nome}</span>
+                      {tag.label && (
+                        <span className={cn("text-[9px] px-1.5 py-0.5 rounded-full font-semibold border flex-shrink-0", tag.className)}>
+                          {tag.label}
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-0.5 h-1.5 bg-muted rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-primary/60 transition-all duration-500"
+                        style={{ width: `${barWidth}%` }}
+                      />
+                    </div>
+                  </div>
+                  <span className="text-xs font-bold text-primary flex-shrink-0 min-w-[28px] text-right">
+                    {r.count}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex gap-2 mb-4 overflow-x-auto">
@@ -203,7 +402,7 @@ export default function DashboardAdmin() {
         />
       </div>
 
-      {/* Visits list */}
+      {/* Lista */}
       {loading ? (
         <div className="space-y-3">
           {[1, 2, 3].map((i) => (
@@ -214,7 +413,7 @@ export default function DashboardAdmin() {
         <div className="text-center py-16 text-muted-foreground">
           <p className="text-lg mb-1">Nenhum cadastro encontrado</p>
           <p className="text-sm">
-            {searchQuery ? "Tente outro termo de busca." : "Ainda não há cadastros nessa categoria."}
+            {searchQuery ? "Tente outro termo de busca." : "Ainda não há cadastros nesse período."}
           </p>
         </div>
       ) : (
