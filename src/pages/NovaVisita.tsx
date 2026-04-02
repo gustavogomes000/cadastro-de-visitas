@@ -761,7 +761,33 @@ export default function NovaVisita() {
                   </div>
                 )}
               </div>
-              <InputField label="CPF *" value={maskCPF(pessoa.cpf)} onChange={(v) => handleCpfChange(v)} placeholder="000.000.000-00" />
+              {/* CPF com autosugestão */}
+              <div className="space-y-1.5 relative" ref={cpfContainerRef}>
+                <label className="text-xs font-bold text-foreground">CPF *</label>
+                <input
+                  value={maskCPF(pessoa.cpf)}
+                  onChange={(e) => handleCpfChange(e.target.value)}
+                  placeholder="000.000.000-00"
+                  className="w-full h-12 rounded-lg bg-background border border-border px-4 text-sm outline-none focus:ring-2 focus:ring-primary/30 transition-shadow placeholder:text-muted-foreground/50"
+                />
+                {cpfDropdownAberto && cpfSugestoes.length > 0 && (
+                  <div className="absolute z-50 w-full mt-1 bg-card border border-border rounded-xl shadow-lg max-h-[220px] overflow-y-auto">
+                    {cpfSugestoes.map((p) => (
+                      <button key={p.id} type="button" onClick={() => { setCpfDropdownAberto(false); navigate(`/nova-visita-existente/${p.id}`); }}
+                        className="w-full text-left px-3 py-2.5 hover:bg-muted flex items-center justify-between transition-colors cursor-pointer border-b border-border/30 last:border-0">
+                        <div>
+                          <span className="text-sm font-semibold">{p.nome}</span>
+                          <p className="text-xs text-muted-foreground">CPF: {maskCPF(p.cpf)}</p>
+                          {p.municipio && <p className="text-xs text-muted-foreground">{p.municipio}</p>}
+                        </div>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-emerald-500/15 text-emerald-600 flex-shrink-0">
+                          Registrar visita
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
               <InputField label="WhatsApp *" value={pessoa.whatsapp} onChange={(v) => setPessoa({ ...pessoa, whatsapp: maskPhone(v) })} placeholder="(00) 00000-0000" />
               <InputField label="Rede social (Instagram ou Facebook)" value={pessoa.instagram} onChange={(v) => setPessoa({ ...pessoa, instagram: v })} placeholder="@usuario ou link" />
               <InputField label="Data de nascimento *" value={pessoa.data_nascimento} onChange={(v) => setPessoa({ ...pessoa, data_nascimento: v })} type="date" />
