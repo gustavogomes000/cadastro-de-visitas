@@ -103,11 +103,11 @@ async function fetchAllUsuariosExternos(): Promise<UsuarioExterno[]> {
   if (usuariosCachePromise) return usuariosCachePromise;
 
   usuariosCachePromise = (async () => {
-    // Tentar endpoint unificado primeiro
+    // Tentar endpoint unificado via proxy próprio
     try {
-      const r = await fetch(`${EXTERNAL_FUNCTIONS_URL}/listar-usuarios-externos`, {
+      const r = await fetch(`${OWN_FUNCTIONS_URL}/listar-usuarios-externos`, {
         method: "GET",
-        headers: EXTERNAL_FUNCTIONS_HEADERS,
+        headers: OWN_FUNCTIONS_HEADERS,
       });
       if (r.ok) {
         const data = await r.json();
