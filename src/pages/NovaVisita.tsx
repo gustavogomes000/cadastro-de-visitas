@@ -343,50 +343,47 @@ export default function NovaVisita() {
     });
   };
 
-  // ── Indicador search via Edge Function ──
+  // ── Indicador search ──
   const handleIndicadorInput = (valor: string) => {
-    const termo = valor.trim();
-    const termoNormalizado = termo.toLowerCase();
+    const termo = valor.trim().toLowerCase();
 
     setIndicadorBusca(valor);
     setIndicadorSelecionado(null);
-    setVisita(prev => ({ ...prev, quem_indicou: valor, indicador_tipo: null, indicador_id: null }));
+    setVisita(prev => ({ ...prev, quem_indicou: valor, indicador_tipo: null, indicador_id: null, indicador_nome: null }));
 
     if (termo.length < 2) {
       setIndicadorBuscando(false);
-      setIndicadorResultados(createEmptyIndicadorResultados());
+      setIndicadorResultados([]);
       setIndicadorDropdownAberto(false);
       return;
     }
 
-    // If cache is loaded, filter instantly
-    const all = allIndicadoresRef.current;
-    if (all.suplentes.length > 0 || all.liderancas.length > 0) {
-      const filtered = filtrarIndicadoresPorTermo(all, termoNormalizado);
+    const all = allUsuariosRef.current;
+    if (all.length > 0) {
+      const filtered = all.filter(u => u.nome?.toLowerCase().includes(termo));
       setIndicadorResultados(filtered);
-      setIndicadorDropdownAberto(hasIndicadorResultados(filtered));
+      setIndicadorDropdownAberto(filtered.length > 0);
       setIndicadorBuscando(false);
       return;
     }
 
-    // Cache not loaded yet — fetch and filter
     setIndicadorBuscando(true);
-    fetchAllIndicadores().then(data => {
-      allIndicadoresRef.current = data;
-      const filtered = filtrarIndicadoresPorTermo(data, termoNormalizado);
+    fetchAllUsuariosExternos().then(data => {
+      allUsuariosRef.current = data;
+      const filtered = data.filter(u => u.nome?.toLowerCase().includes(termo));
       setIndicadorResultados(filtered);
-      setIndicadorDropdownAberto(hasIndicadorResultados(filtered));
+      setIndicadorDropdownAberto(filtered.length > 0);
       setIndicadorBuscando(false);
     });
   };
 
-  const selecionarIndicador = (item: IndicadorResumo, tipo: IndicadorTipo) => {
+  const selecionarIndicador = (item: UsuarioExterno) => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     setIndicadorBuscando(false);
-    setIndicadorSelecionado({ id: item.id, nome: item.nome, tipo });
+    setIndicadorSelecionado(item);
     setIndicadorBusca(item.nome);
     setIndicadorDropdownAberto(false);
-    setVisita(prev => ({ ...prev, quem_indicou: item.nome, indicador_tipo: tipo, indicador_id: item.id }));
+    setVisita(prev => ({ ...prev, quem_indicou: item.nome, indicador_tipo: item.tipo, indicador_id: item.id, indicador_nome: item.nome }));
   };
 
   const limparIndicador = () => {
@@ -394,8 +391,8 @@ export default function NovaVisita() {
     setIndicadorBuscando(false);
     setIndicadorSelecionado(null);
     setIndicadorBusca("");
-    setVisita(prev => ({ ...prev, quem_indicou: "", indicador_tipo: null, indicador_id: null }));
-    setIndicadorResultados(createEmptyIndicadorResultados());
+    setVisita(prev => ({ ...prev, quem_indicou: "", indicador_tipo: null, indicador_id: null, indicador_nome: null }));
+    setIndicadorResultados([]);
     setIndicadorDropdownAberto(false);
   };
 
