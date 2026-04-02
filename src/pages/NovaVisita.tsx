@@ -580,14 +580,6 @@ export default function NovaVisita() {
     setSaving(false);
   };
 
-  const localGetStatusColor = (status: string) => {
-    switch (status) {
-      case "Aguardando": return "text-yellow-600 dark:text-yellow-400";
-      case "Em andamento": return "text-blue-600 dark:text-blue-400";
-      case "Resolvido": return "text-emerald-600 dark:text-emerald-400";
-      default: return "text-muted-foreground";
-    }
-  };
 
   return (
     <AppLayout>
