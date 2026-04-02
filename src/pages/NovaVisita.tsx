@@ -528,9 +528,9 @@ export default function NovaVisita() {
           titulo_eleitor: pessoa.titulo_eleitor || null,
           regiao_atuacao: pessoa.municipio || null,
         };
-        fetch(`${EXTERNAL_FUNCTIONS_URL}/receber-cadastro-externo`, {
+      fetch(`${OWN_FUNCTIONS_URL}/receber-cadastro-externo`, {
           method: "POST",
-          headers: EXTERNAL_FUNCTIONS_HEADERS,
+          headers: OWN_FUNCTIONS_HEADERS,
           body: JSON.stringify(cadastroPayload),
         }).then(r => r.json()).then(data => {
           if (data.sucesso) {
