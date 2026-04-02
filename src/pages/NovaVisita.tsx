@@ -498,11 +498,12 @@ export default function NovaVisita() {
           titulo_eleitor: pessoa.titulo_eleitor || null,
           regiao_atuacao: pessoa.municipio || null,
         };
-      fetch(`${OWN_FUNCTIONS_URL}/receber-cadastro-externo`, {
-          method: "POST",
-          headers: OWN_FUNCTIONS_HEADERS,
-          body: JSON.stringify(cadastroPayload),
-        }).then(r => r.json()).then(data => {
+        getAuthHeaders().then(headers => {
+          fetch(`${OWN_FUNCTIONS_URL}/receber-cadastro-externo`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify(cadastroPayload),
+          }).then(r => r.json()).then(data => {
           if (data.sucesso) {
             toast({ title: "🔗 Sincronizado!", description: `${pessoa.nome} cadastrado(a) no sistema principal.` });
           } else if (data.aviso) {
