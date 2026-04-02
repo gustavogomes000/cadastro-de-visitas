@@ -167,16 +167,15 @@ export default function NovaVisita() {
   const { nomeUsuario, isAdmin } = useAuth();
   const isHomePage = location.pathname === "/";
 
-  const [cpfInput, setCpfInput] = useState("");
-  const [cpfChecked, setCpfChecked] = useState(false);
   const [showDuplicateDialog, setShowDuplicateDialog] = useState(false);
+  const [duplicatePessoa, setDuplicatePessoa] = useState<any>(null);
   const [searchInput, setSearchInput] = useState("");
   const searchInputRef = useRef(searchInput);
   const [searching, setSearching] = useState(false);
   const [saving, setSaving] = useState(false);
   const [existingPessoaId, setExistingPessoaId] = useState<string | null>(pessoaId || null);
   const [locked, setLocked] = useState(false);
-  const [showForm, setShowForm] = useState(false);
+  const [showForm, setShowForm] = useState(true);
   const [pessoaStatus, setPessoaStatus] = useState<"idle" | "found" | "new" | "api">("idle");
   const [visitHistory, setVisitHistory] = useState<any[]>([]);
 
