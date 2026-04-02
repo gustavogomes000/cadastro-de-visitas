@@ -246,11 +246,6 @@ export default function DashboardAdmin() {
                             {tag.label ? `${tag.label}: ` : ""}{v.quem_indicou}
                           </span>
                         )}
-                        {v.status && (
-                          <span className={cn("text-[10px] px-2 py-0.5 rounded-full font-semibold", getStatusColor(v.status))}>
-                            {v.status}
-                          </span>
-                        )}
                       </div>
                     </div>
                     <div className="text-right flex-shrink-0">
