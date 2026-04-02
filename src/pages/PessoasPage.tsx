@@ -28,10 +28,11 @@ export default function PessoasPage() {
   const filtered = pessoas.filter((p) => {
     if (!search) return true;
     const q = search.toLowerCase();
+    const cpfDigits = q.replace(/\D/g, "");
     return (
       p.nome?.toLowerCase().includes(q) ||
-      p.cpf?.includes(q.replace(/\D/g, "")) ||
-      p.telefone?.includes(q)
+      (cpfDigits.length > 0 && p.cpf?.includes(cpfDigits)) ||
+      (q.length > 0 && p.telefone?.includes(q))
     );
   });
 
