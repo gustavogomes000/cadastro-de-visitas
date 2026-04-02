@@ -299,7 +299,7 @@ export default function NovaVisita() {
         const { data } = await supabase
           .from("pessoas")
           .select("id, nome, cpf, municipio")
-          .neq("origem", "DESATIVADO")
+          .or("origem.is.null,origem.neq.DESATIVADO")
           .ilike("cpf", `${raw}%`)
           .order("nome")
           .limit(5);
@@ -318,7 +318,7 @@ export default function NovaVisita() {
         toast({ title: "CPF inválido", variant: "destructive" });
         return;
       }
-      const { data: existente } = await supabase.from("pessoas").select("*").eq("cpf", raw).neq("origem", "DESATIVADO").maybeSingle();
+      const { data: existente } = await supabase.from("pessoas").select("*").eq("cpf", raw).or("origem.is.null,origem.neq.DESATIVADO").maybeSingle();
       if (existente && existente.id !== existingPessoaId) {
         navigate(`/nova-visita-existente/${existente.id}`);
       }
@@ -347,7 +347,7 @@ export default function NovaVisita() {
         setSearching(false);
         return;
       }
-      const { data: existente } = await supabase.from("pessoas").select("*").eq("cpf", raw.slice(0, 11)).neq("origem", "DESATIVADO").maybeSingle();
+      const { data: existente } = await supabase.from("pessoas").select("*").eq("cpf", raw.slice(0, 11)).or("origem.is.null,origem.neq.DESATIVADO").maybeSingle();
       if (existente) {
         navigate(`/nova-visita-existente/${existente.id}`);
         setSearching(false);
@@ -370,7 +370,7 @@ export default function NovaVisita() {
       setLocked(true);
       setShowForm(true);
     } else {
-      const { data: matches } = await supabase.from("pessoas").select("*").neq("origem", "DESATIVADO").ilike("nome", `%${trimmed}%`).limit(1);
+      const { data: matches } = await supabase.from("pessoas").select("*").or("origem.is.null,origem.neq.DESATIVADO").ilike("nome", `%${trimmed}%`).limit(1);
       if (matches && matches.length > 0) {
         fillPessoa(matches[0]);
         setExistingPessoaId(matches[0].id);
