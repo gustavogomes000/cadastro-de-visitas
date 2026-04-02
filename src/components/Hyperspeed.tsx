@@ -335,7 +335,10 @@ const Hyperspeed = ({ effectOptions = DEFAULT_EFFECT_OPTIONS }: { effectOptions?
     #define USE_FOG;
     ${THREE.ShaderChunk['fog_pars_fragment']}
     varying vec3 vColor;
-    void main(){ gl_FragColor = vec4(vColor,1.); ${THREE.ShaderChunk['fog_fragment']} }`;
+    void main(){
+      gl_FragColor = vec4(vColor,1.);
+      ${THREE.ShaderChunk['fog_fragment']}
+    }`;
 
     const roadBaseFragment = `
     #define USE_FOG;
@@ -630,18 +633,22 @@ const Hyperspeed = ({ effectOptions = DEFAULT_EFFECT_OPTIONS }: { effectOptions?
       }
       tick() {
         if (this.disposed) return;
-        if (!this.hasValidSize) {
-          const w = this.container.offsetWidth; const h = this.container.offsetHeight;
-          if (w > 0 && h > 0) {
-            this.renderer.setSize(w, h, false); this.camera.aspect = w / h;
-            this.camera.updateProjectionMatrix(); this.composer.setSize(w, h); this.hasValidSize = true;
-          } else { requestAnimationFrame(this.tick); return; }
+        try {
+          if (!this.hasValidSize) {
+            const w = this.container.offsetWidth; const h = this.container.offsetHeight;
+            if (w > 0 && h > 0) {
+              this.renderer.setSize(w, h, false); this.camera.aspect = w / h;
+              this.camera.updateProjectionMatrix(); this.composer.setSize(w, h); this.hasValidSize = true;
+            } else { requestAnimationFrame(this.tick); return; }
+          }
+          if (resizeRendererToDisplaySize(this.renderer, this.setSize)) {
+            const canvas = this.renderer.domElement;
+            if (this.hasValidSize) { this.camera.aspect = canvas.clientWidth / canvas.clientHeight; this.camera.updateProjectionMatrix(); }
+          }
+          if (this.hasValidSize) { const delta = this.clock.getDelta(); this.render(delta); this.update(delta); }
+        } catch (err) {
+          console.warn("[Hyperspeed] render error:", err);
         }
-        if (resizeRendererToDisplaySize(this.renderer, this.setSize)) {
-          const canvas = this.renderer.domElement;
-          if (this.hasValidSize) { this.camera.aspect = canvas.clientWidth / canvas.clientHeight; this.camera.updateProjectionMatrix(); }
-        }
-        if (this.hasValidSize) { const delta = this.clock.getDelta(); this.render(delta); this.update(delta); }
         requestAnimationFrame(this.tick);
       }
     }
@@ -650,9 +657,15 @@ const Hyperspeed = ({ effectOptions = DEFAULT_EFFECT_OPTIONS }: { effectOptions?
     if (!container) return;
     const options = { ...DEFAULT_EFFECT_OPTIONS, ...effectOptions, colors: { ...DEFAULT_EFFECT_OPTIONS.colors, ...effectOptions.colors } };
     options.distortion = distortions[options.distortion as unknown as string];
-    const myApp = new App(container, options);
-    appRef.current = myApp;
-    myApp.loadAssets().then(myApp.init);
+    let myApp: App;
+    try {
+      myApp = new App(container, options);
+      appRef.current = myApp;
+      myApp.loadAssets().then(myApp.init).catch(err => console.warn("[Hyperspeed] init error:", err));
+    } catch (err) {
+      console.warn("[Hyperspeed] Failed to initialize:", err);
+      return;
+    }
     return () => { if (appRef.current) { appRef.current.dispose(); appRef.current = null; } };
   }, [effectOptions]);
 
