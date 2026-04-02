@@ -460,6 +460,14 @@ export default function NovaVisita() {
         toast({ title: "Nome obrigatório", variant: "destructive" });
         return;
       }
+      if (!pessoa.whatsapp || pessoa.whatsapp.replace(/\D/g, "").length < 10) {
+        toast({ title: "WhatsApp obrigatório", variant: "destructive" });
+        return;
+      }
+      if (!pessoa.data_nascimento) {
+        toast({ title: "Data de nascimento obrigatória", variant: "destructive" });
+        return;
+      }
     }
     if (!visita.assunto) {
       toast({ title: "Assunto obrigatório", variant: "destructive" });
