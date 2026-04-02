@@ -186,6 +186,7 @@ export default function NovaVisita() {
       const { data } = await supabase
         .from("pessoas")
         .select("id, nome, municipio, uf")
+        .neq("origem", "DESATIVADO")
         .ilike("nome", `%${termo}%`)
         .limit(8);
       setNomeSugestoes(data || []);
