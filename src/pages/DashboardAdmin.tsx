@@ -186,20 +186,21 @@ export default function DashboardAdmin() {
   const countSuplente = visitasFiltradas.filter(v => getIndicadorTipo(v.quem_indicou) === "suplente").length;
   const countLideranca = visitasFiltradas.filter(v => { const t = getIndicadorTipo(v.quem_indicou); return t === "lideranca" || t === "lideranca_cadastrada"; }).length;
 
-  // Ranking de indicadores
+  // Ranking de indicadores (só suplentes e lideranças reais)
   const ranking = useMemo(() => {
     const counts = new Map<string, { nome: string; tipo: string; count: number }>();
     visitasFiltradas.forEach((v) => {
       if (!v.quem_indicou) return;
+      const tipo = getIndicadorTipo(v.quem_indicou);
+      if (!tipo || tipo === "desconhecido") return; // Só mostra suplentes/lideranças reais
       const key = v.quem_indicou.toLowerCase().trim();
       const existing = counts.get(key);
       if (existing) {
         existing.count++;
       } else {
-        const tipo = getIndicadorTipo(v.quem_indicou);
         counts.set(key, {
           nome: v.quem_indicou,
-          tipo: tipo || "desconhecido",
+          tipo: tipo,
           count: 1,
         });
       }
@@ -207,7 +208,7 @@ export default function DashboardAdmin() {
     return Array.from(counts.values())
       .sort((a, b) => b.count - a.count)
       .slice(0, 5);
-  }, [visitasFiltradas]);
+  }, [visitasFiltradas, externos]);
 
   // Chart data — cadastros por dia (últimos N dias baseado no período)
   const chartData = useMemo(() => {
