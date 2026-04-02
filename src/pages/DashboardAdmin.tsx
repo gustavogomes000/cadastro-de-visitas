@@ -527,7 +527,7 @@ export default function DashboardAdmin() {
                     <InfoRow label="Seção" value={p.secao_eleitoral} />
                     <InfoRow label="Data/hora visita" value={v.data_hora ? formatDateTime(v.data_hora) : null} />
                     <InfoRow label="Origem" value={v.origem_visita} />
-                    <InfoRow label="Observações" value={v.observacoes} />
+                    
                     <InfoRow label="Cadastrado por" value={v.cadastrado_por} />
 
                     <button
