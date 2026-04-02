@@ -627,8 +627,40 @@ export default function NovaVisita() {
               <p className="text-sm font-bold text-primary uppercase tracking-wide">Dados Pessoais</p>
             </div>
             <div className="space-y-4">
+              {/* Nome com autosugestão */}
+              <div className="space-y-1.5 relative" ref={nomeContainerRef}>
+                <label className="text-xs font-bold text-foreground">Nome completo *</label>
+                <div className="relative">
+                  <input
+                    value={pessoa.nome}
+                    onChange={(e) => handleNomeInput(e.target.value)}
+                    onFocus={() => {
+                      if (pessoa.nome.trim().length >= 2 && nomeSugestoes.length > 0) {
+                        setNomeDropdownAberto(true);
+                      }
+                    }}
+                    placeholder="Nome completo"
+                    className="w-full h-12 rounded-lg bg-background border border-border px-4 text-sm outline-none focus:ring-2 focus:ring-primary/30 transition-shadow placeholder:text-muted-foreground/50"
+                  />
+                  {nomeBuscando && (
+                    <Loader2 size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground animate-spin" />
+                  )}
+                </div>
+                {nomeDropdownAberto && nomeSugestoes.length > 0 && (
+                  <div className="absolute z-50 w-full mt-1 bg-card border border-border rounded-xl shadow-lg max-h-[220px] overflow-y-auto">
+                    {nomeSugestoes.map((p) => (
+                      <button key={p.id} type="button" onClick={() => { setNomeDropdownAberto(false); navigate(`/nova-visita-existente/${p.id}`); }}
+                        className="w-full text-left px-3 py-2.5 hover:bg-muted flex items-center justify-between transition-colors cursor-pointer border-b border-border/30 last:border-0">
+                        <div>
+                          <span className="text-sm font-semibold">{p.nome}</span>
+                          {p.municipio && <p className="text-xs text-muted-foreground">{p.municipio}{p.uf ? ` - ${p.uf}` : ""}</p>}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
               <InputField label="CPF" value={maskCPF(pessoa.cpf)} onChange={(v) => handleCpfChange(v)} placeholder="000.000.000-00" />
-              <InputField label="Nome completo *" value={pessoa.nome} onChange={(v) => setPessoa({ ...pessoa, nome: v })} placeholder="Nome completo" />
               <InputField label="WhatsApp" value={pessoa.whatsapp} onChange={(v) => setPessoa({ ...pessoa, whatsapp: maskPhone(v) })} placeholder="(00) 00000-0000" />
               <InputField label="Rede social (Instagram ou Facebook)" value={pessoa.instagram} onChange={(v) => setPessoa({ ...pessoa, instagram: v })} placeholder="@usuario ou link" />
               <InputField label="Data de nascimento" value={pessoa.data_nascimento} onChange={(v) => setPessoa({ ...pessoa, data_nascimento: v })} type="date" />
