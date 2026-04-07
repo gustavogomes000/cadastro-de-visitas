@@ -568,12 +568,12 @@ export default function NovaVisita() {
         visitaPayload.indicador_tipo = visita.indicador_tipo;
         visitaPayload.indicador_id = visita.indicador_id;
       }
-      const { error: visitaError } = await supabase.from("visitas").insert(visitaPayload);
+      const { error: visitaError } = await supabase.from("visitas").insert(visitaPayload as any);
       if (visitaError) {
         if (visitaError.message?.includes("indicador_tipo") || visitaError.message?.includes("indicador_id")) {
           delete visitaPayload.indicador_tipo;
           delete visitaPayload.indicador_id;
-          const { error: retryError } = await supabase.from("visitas").insert(visitaPayload);
+          const { error: retryError } = await supabase.from("visitas").insert(visitaPayload as any);
           if (retryError) throw retryError;
         } else {
           throw visitaError;
