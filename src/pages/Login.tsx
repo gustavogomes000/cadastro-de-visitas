@@ -405,7 +405,7 @@ export default function Login() {
         </div>
 
         {/* Footer */}
-        <div className="text-center space-y-1 pb-4">
+        <div className="text-center space-y-0.5 pt-2 pb-6">
           <p className="text-[10px] text-gray-400">Pré-candidata a Deputada Estadual — GO 2026</p>
           <a
             href="https://www.drafernandasarelli.com.br"
