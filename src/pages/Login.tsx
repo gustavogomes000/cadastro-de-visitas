@@ -293,7 +293,7 @@ export default function Login() {
             <img src={candidataImg} alt="Dra. Fernanda Sarelli" className="w-full h-full object-cover" loading="eager" />
           </div>
           {/* Logo overlapping */}
-          <img src={logoImg} alt="Logo Sarelli" className="h-28 -mt-3 object-contain" />
+          <img src={logoImg} alt="Logo Sarelli" className="h-36 -mt-3 object-contain" />
           {/* Subtitle */}
           <p className="text-xs font-semibold tracking-widest uppercase -mt-2" style={{ color: "#c8aa64" }}>
             {APP_TITLE}
