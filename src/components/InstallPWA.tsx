@@ -50,6 +50,10 @@ export default function InstallPWA() {
 
   if (isInstalled) return null;
 
+  // Hide on login page
+  const isLoginPage = window.location.pathname === '/' || window.location.pathname === '/login';
+  if (isLoginPage) return null;
+
   return (
     <Button 
       onClick={handleInstallClick}
